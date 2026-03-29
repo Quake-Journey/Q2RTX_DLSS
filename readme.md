@@ -1,21 +1,86 @@
-# Quake II RTX
+# Q2RTX DLSS Edition by ly
 
 [![Build Status](https://github.com/Quake-Journey/Q2RTX_DLSS/actions/workflows/build.yml/badge.svg)](https://github.com/Quake-Journey/Q2RTX_DLSS/actions/workflows/build.yml)
 
-## Fork Notes
+Public Beta 0.8
+
+Based on Q2RTX 1.8.1
 
 This repository is the `Q2RTX_DLSS` fork maintained under `Quake-Journey`.
 
-It is based on the public NVIDIA **Quake II RTX** source tree, with local changes and bundled third-party source directories under `extern/`.
+It is a self-contained Quake II RTX source tree focused on integrating modern NVIDIA Streamline features into Q2RTX, instead of being only a plain mirror of upstream NVIDIA Q2RTX.
+
+## Purpose
+
+This public beta branch is intended for testing the integration of NVIDIA DLSS Super Resolution, DLSS Ray Reconstruction, DLSS Multi Frame Generation, and NVIDIA Reflex in Q2RTX.
+
+It targets owners of compatible NVIDIA RTX GPUs and is meant for:
+
+- image-quality comparisons
+- artifact hunting
+- compatibility testing across different systems
+- source-level work on the DLSS / Streamline integration
+
+## Included In This Fork
+
+This fork currently exposes and tests the following user-facing additions:
+
+- NVIDIA DLSS Super Resolution
+- DLAA
+- DLSS Ray Reconstruction
+- DLSS Multi Frame Generation 2X / 3X / 4X
+- NVIDIA Reflex
+- DLSS custom scale controls
+- DLSS debug overlay with presets, DLL versions, and active runtime parameters
+- fork-specific DLSS / RR tuning baselines
+
+## Current Status
+
+Current project notes in this source tree indicate the following working status for the public beta line:
+
+- `DLSS SR` works
+- `DLSS-G / MFG` works
+- `RR` is usable and stable enough for testing, though some reflection-heavy scenes may still show artifacts
+- `HDR + MFG` should currently be treated as unsupported for serious testing
+
+## Main Limitations
+
+- MFG already works, but render FPS can still drop significantly in aggressive DLSS SR modes, especially Ultra Performance.
+- For MFG, HDR should currently be considered unsupported for serious testing and is best kept off.
+- RR is stable enough to use, but some mirror, glass, and complex reflection scenes may still show residual artifacts.
+- Formal Ultra Quality is hidden from the menu; use Custom scale instead.
+- MFG availability depends on GPU and driver. Intended usage in this beta: `2X` mainly for RTX 40/50, `3X` and `4X` mainly for RTX 50.
+
+## Important Notes
+
+- Original game pak files are not included here for licensing reasons.
+- A lawful Quake II RTX / Quake II RTX Remaster installation with the required base game data is still needed.
+- This repository is for a beta branch; expect unfinished edges and scene-specific artifacts.
+
+Useful local documents in this repo:
+
+- [Public beta overview (EN)](project-notes/README_PUBLIC_BETA_EN.txt)
+- [Build from scratch notes](project-notes/BUILD_FROM_SCRATCH.md)
+- [Source package notes](README_PACKAGE.md)
+
+Project channels:
+
+- Telegram: https://t.me/Q2RTX
+- YouTube: https://www.youtube.com/@QuakeJourney
 
 Repository workflow notes:
 
 - Initial repository import can be done with [`push_to_q2rtx_dlss.ps1`](push_to_q2rtx_dlss.ps1).
 - Regular follow-up commits and pushes can be done with [`publish_changes.ps1`](publish_changes.ps1).
 - This repository is currently intended to be self-contained, so `extern/` contents are stored directly instead of being tracked as git submodules.
+- If Streamline dependency folders are missing after cloning on another machine, run `extern/Streamline/setup.bat`.
 
-**Quake II RTX** is NVIDIA's attempt at implementing a fully functional 
-version of Id Software's 1997 hit game **Quake II** with RTX path-traced 
+## Upstream Base
+
+This fork is based on the public NVIDIA **Quake II RTX** source tree.
+
+**Quake II RTX** is NVIDIA's attempt at implementing a fully functional
+version of Id Software's 1997 hit game **Quake II** with RTX path-traced
 global illumination.
 
 **Quake II RTX** builds upon the [Q2VKPT](http://brechpunkt.de/q2vkpt) 
