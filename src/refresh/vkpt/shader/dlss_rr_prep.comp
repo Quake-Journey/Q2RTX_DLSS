@@ -1,0 +1,341 @@
+/*
+Copyright (C) 2018 Christoph Schied
+Copyright (C) 2019, NVIDIA CORPORATION. All rights reserved.
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along
+with this program; if not, write to the Free Software Foundation, Inc.,
+51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+*/
+
+#version 460
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_nonuniform_qualifier : enable
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+#include "utils.glsl"
+
+#define GLOBAL_UBO_DESC_SET_IDX 0
+#include "global_ubo.h"
+
+#define GLOBAL_TEXTURES_DESC_SET_IDX 1
+#include "global_textures.h"
+
+#include "brdf.glsl"
+
+/* Streamline RR guide recommends a view/roughness-aware specular albedo guide
+ * rather than raw F0.  Using only F0 is stable enough to bootstrap RR but it
+ * leaves visible shimmer on glossy floors/walls because the guide no longer
+ * matches the actual BRDF response seen by the noisy color input. */
+vec3 env_brdf_approx2(vec3 specular_color, float alpha, float no_v)
+{
+    no_v = abs(no_v);
+
+    vec4 X = vec4(1.0, no_v, no_v * no_v, no_v * no_v * no_v);
+    vec4 Y = vec4(1.0, alpha, alpha * alpha, alpha * alpha * alpha);
+
+    mat2 M1 = mat2(
+        0.99044,  1.29678,
+       -1.28514, -0.755907
+    );
+    mat3 M2 = mat3(
+         1.0,     20.3225, 121.563,
+         2.92338, -27.0302, 626.13,
+        59.4188, 222.592,  316.627
+    );
+    mat2 M3 = mat2(
+        0.0365463,  9.0632,
+        3.32707,   -9.04756
+    );
+    mat3 M4 = mat3(
+         1.0,      9.04401,   5.56589,
+         3.59685, -16.3174,  19.7886,
+        -1.36772,  9.22949, -20.2123
+    );
+
+    float bias  = dot(M1 * X.xy,  Y.xy)  / dot(M2 * X.xyw, Y.xyw);
+    float scale = dot(M3 * X.xy,  Y.xy)  / dot(M4 * X.xzw, Y.xyw);
+
+    bias *= clamp(specular_color.g * 50.0, 0.0, 1.0);
+    return specular_color * max(0.0, scale) + vec3(max(0.0, bias));
+}
+
+ivec2 get_rr_source_position(ivec2 output_pos, out int other_side_offset)
+{
+    ivec2 pos;
+    pos.x = output_pos.x / 2;
+    pos.y = output_pos.y;
+
+    int px = output_pos.x & 1;
+    int py = output_pos.y & 1;
+
+    bool is_even_checkerboard = px == py;
+    if (global_ubo.pt_swap_checkerboard != 0)
+        is_even_checkerboard = !is_even_checkerboard;
+
+    other_side_offset = global_ubo.width / 2;
+    if (!is_even_checkerboard)
+    {
+        pos.x += global_ubo.width / 2;
+        other_side_offset = -other_side_offset;
+    }
+
+    return pos;
+}
+
+vec4 safe_rr_load(ivec2 pos)
+{
+    if (pos.x < 0 || pos.y < 0 || pos.x >= global_ubo.width || pos.y >= global_ubo.height)
+        return vec4(0.0);
+    return imageLoad(IMG_ASVGF_COLOR, pos);
+}
+
+bool rr_valid_pos(ivec2 pos)
+{
+    return pos.x >= 0 && pos.y >= 0 && pos.x < global_ubo.width && pos.y < global_ubo.height;
+}
+
+vec4 rr_safe_fetch_pt_base_color(ivec2 pos)
+{
+    return rr_valid_pos(pos) ? texelFetch(TEX_PT_BASE_COLOR_A, pos, 0) : vec4(0.0);
+}
+
+vec4 rr_safe_fetch_pt_metallic(ivec2 pos)
+{
+    return rr_valid_pos(pos) ? texelFetch(TEX_PT_METALLIC_A, pos, 0) : vec4(0.0);
+}
+
+vec4 rr_safe_fetch_pt_throughput_dist(ivec2 pos)
+{
+    return rr_valid_pos(pos) ? texelFetch(TEX_PT_GODRAYS_THROUGHPUT_DIST, pos, 0) : vec4(0.0);
+}
+
+vec4 rr_safe_fetch_pt_transparent(ivec2 pos)
+{
+    return rr_valid_pos(pos) ? imageLoad(IMG_PT_TRANSPARENT, pos) : vec4(0.0);
+}
+
+vec3 rr_safe_fetch_pt_normal(ivec2 pos)
+{
+    return rr_valid_pos(pos) ? decode_normal(texelFetch(TEX_PT_NORMAL_A, pos, 0).x) : vec3(0.0);
+}
+
+vec3 rr_safe_fetch_pt_view_dir(ivec2 pos)
+{
+    return rr_valid_pos(pos) ? imageLoad(IMG_PT_VIEW_DIRECTION, pos).xyz : vec3(0.0);
+}
+
+vec2 rr_safe_fetch_pt_motion(ivec2 pos)
+{
+    return rr_valid_pos(pos) ? imageLoad(IMG_PT_MOTION, pos).xy : vec2(0.0);
+}
+
+void main()
+{
+    ivec2 ipos = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 output_size = imageSize(IMG_DLSS_RR_COLOR);
+    if (ipos.x >= output_size.x || ipos.y >= output_size.y)
+        return;
+
+    if (ipos.x >= global_ubo.width || ipos.y >= global_ubo.height)
+    {
+        imageStore(IMG_FSR_EASU_OUTPUT, ipos, vec4(0.0));
+        imageStore(IMG_FSR_RCAS_OUTPUT, ipos, vec4(0.0));
+        imageStore(IMG_HQ_COLOR_INTERLEAVED, ipos, vec4(0.0));
+        imageStore(IMG_DLSS_RR_MOTION, ipos, vec4(0.0));
+        imageStore(IMG_DLSS_RR_ROUGHNESS, ipos, vec4(0.0));
+        imageStore(IMG_DLSS_RR_COLOR, ipos, vec4(0.0));
+        imageStore(IMG_DLSS_RR_COLOR_BEFORE_TRANSPARENCY, ipos, vec4(0.0));
+        imageStore(IMG_DLSS_RR_DEPTH, ipos, vec4(0.0));
+        imageStore(IMG_DLSS_RR_SPEC_HIT_DIST, ipos, vec4(0.0));
+        imageStore(IMG_DLSS_RR_SPEC_RAY_DIR_HIT_DIST, ipos, vec4(0.0));
+        imageStore(IMG_DLSS_RR_SPEC_MOTION, ipos, vec4(0.0));
+        return;
+    }
+
+    int other_side_offset;
+    ivec2 src_pos = get_rr_source_position(ipos, other_side_offset);
+
+    vec4 center = imageLoad(IMG_ASVGF_COLOR, src_pos);
+    int checkerboard_flags = int(center.a);
+    bool is_checkerboarded_surface =
+        (global_ubo.flt_enable != 0) &&
+        (bitCount(checkerboard_flags & CHECKERBOARD_FLAG_FIELD_MASK) > 1);
+
+    /* Split-path reflection/refraction surfaces are checkerboard-resolved by
+       q2rtx before the legacy TAA path.  Feeding RR the raw alternating field
+       pattern leaves a residual "heat haze" shimmer even after motion-vector
+       fixes.  Reuse the resolved FLAT_COLOR/FLAT_MOTION only for these marked
+       surfaces; keep raw de-interleaved inputs for regular surfaces. */
+    vec3 rr_color = center.rgb;
+    vec2 spec_motion = rr_safe_fetch_pt_motion(src_pos);
+    vec2 motion = spec_motion;
+    vec4 transparent = rr_safe_fetch_pt_transparent(src_pos);
+    vec4 base_color = rr_safe_fetch_pt_base_color(src_pos);
+    vec4 metallic_roughness_full = rr_safe_fetch_pt_metallic(src_pos);
+    vec4 throughput_dist = rr_safe_fetch_pt_throughput_dist(src_pos);
+    vec3 normal = rr_safe_fetch_pt_normal(src_pos);
+    vec3 view_dir = rr_safe_fetch_pt_view_dir(src_pos);
+    if (is_checkerboarded_surface)
+    {
+        ivec2 other_a = src_pos + ivec2(other_side_offset, 1);
+        ivec2 other_b = src_pos + ivec2(other_side_offset, -1);
+        ivec2 other_c = src_pos + ivec2(other_side_offset, 0);
+        ivec2 other_d = src_pos + ivec2(other_side_offset + (((ipos.x & 1) != 0) ? 1 : -1), 0);
+
+        rr_color = imageLoad(IMG_FLAT_COLOR, ipos).rgb;
+
+        vec4 other_transparent_a = rr_safe_fetch_pt_transparent(other_a);
+        vec4 other_transparent_b = rr_safe_fetch_pt_transparent(other_b);
+        vec4 other_transparent_c = rr_safe_fetch_pt_transparent(other_c);
+        vec4 other_transparent_d = rr_safe_fetch_pt_transparent(other_d);
+        vec4 other_base_color_a = rr_safe_fetch_pt_base_color(other_a);
+        vec4 other_base_color_b = rr_safe_fetch_pt_base_color(other_b);
+        vec4 other_base_color_c = rr_safe_fetch_pt_base_color(other_c);
+        vec4 other_base_color_d = rr_safe_fetch_pt_base_color(other_d);
+        vec4 other_metallic_roughness_a = rr_safe_fetch_pt_metallic(other_a);
+        vec4 other_metallic_roughness_b = rr_safe_fetch_pt_metallic(other_b);
+        vec4 other_metallic_roughness_c = rr_safe_fetch_pt_metallic(other_c);
+        vec4 other_metallic_roughness_d = rr_safe_fetch_pt_metallic(other_d);
+        vec4 other_throughput_dist_a = rr_safe_fetch_pt_throughput_dist(other_a);
+        vec4 other_throughput_dist_b = rr_safe_fetch_pt_throughput_dist(other_b);
+        vec4 other_throughput_dist_c = rr_safe_fetch_pt_throughput_dist(other_c);
+        vec4 other_throughput_dist_d = rr_safe_fetch_pt_throughput_dist(other_d);
+        vec3 other_normal_a = rr_safe_fetch_pt_normal(other_a);
+        vec3 other_normal_b = rr_safe_fetch_pt_normal(other_b);
+        vec3 other_normal_c = rr_safe_fetch_pt_normal(other_c);
+        vec3 other_normal_d = rr_safe_fetch_pt_normal(other_d);
+        vec3 other_view_dir_a = rr_safe_fetch_pt_view_dir(other_a);
+        vec3 other_view_dir_b = rr_safe_fetch_pt_view_dir(other_b);
+        vec3 other_view_dir_c = rr_safe_fetch_pt_view_dir(other_c);
+        vec3 other_view_dir_d = rr_safe_fetch_pt_view_dir(other_d);
+        vec2 other_motion_a = rr_safe_fetch_pt_motion(other_a);
+        vec2 other_motion_b = rr_safe_fetch_pt_motion(other_b);
+        vec2 other_motion_c = rr_safe_fetch_pt_motion(other_c);
+        vec2 other_motion_d = rr_safe_fetch_pt_motion(other_d);
+
+        if (ipos.x == 0 || ipos.x == global_ubo.width - 1)
+        {
+            other_transparent_c = vec4(0.0);
+            other_transparent_d = vec4(0.0);
+            other_base_color_c = vec4(0.0);
+            other_base_color_d = vec4(0.0);
+            other_metallic_roughness_c = vec4(0.0);
+            other_metallic_roughness_d = vec4(0.0);
+            other_throughput_dist_c = vec4(0.0);
+            other_throughput_dist_d = vec4(0.0);
+            other_normal_c = vec3(0.0);
+            other_normal_d = vec3(0.0);
+            other_view_dir_c = vec3(0.0);
+            other_view_dir_d = vec3(0.0);
+            other_motion_c = vec2(0.0);
+            other_motion_d = vec2(0.0);
+        }
+
+        vec4 neighbor_color_samples =
+            (safe_rr_load(other_a) +
+             safe_rr_load(other_b) +
+             safe_rr_load(other_c) +
+             safe_rr_load(other_d)) * 0.25;
+        vec2 neighbor_motion =
+            (other_motion_a + other_motion_b + other_motion_c + other_motion_d) * 0.25;
+
+        float center_luma = luminance(center.rgb);
+        float neighbor_luma = luminance(neighbor_color_samples.rgb);
+        float motion_mix = neighbor_luma / max(center_luma + neighbor_luma, 1e-4);
+        motion = mix(motion, neighbor_motion, clamp(motion_mix, 0.0, 1.0));
+
+        vec4 neighbor_transparent =
+            (other_transparent_a + other_transparent_b + other_transparent_c + other_transparent_d) * 0.25;
+        vec4 neighbor_base_color =
+            (other_base_color_a + other_base_color_b + other_base_color_c + other_base_color_d) * 0.25;
+        vec4 neighbor_metallic_roughness =
+            (other_metallic_roughness_a + other_metallic_roughness_b + other_metallic_roughness_c + other_metallic_roughness_d) * 0.25;
+        vec4 neighbor_throughput_dist =
+            (other_throughput_dist_a + other_throughput_dist_b + other_throughput_dist_c + other_throughput_dist_d) * 0.25;
+        vec3 neighbor_normal =
+            (other_normal_a + other_normal_b + other_normal_c + other_normal_d) * 0.25;
+        vec3 neighbor_view_dir =
+            (other_view_dir_a + other_view_dir_b + other_view_dir_c + other_view_dir_d) * 0.25;
+
+        transparent = mix(transparent, neighbor_transparent, 0.5);
+        base_color = mix(base_color, neighbor_base_color, 0.5);
+        metallic_roughness_full = mix(metallic_roughness_full, neighbor_metallic_roughness, 0.5);
+        throughput_dist = mix(throughput_dist, neighbor_throughput_dist, 0.5);
+
+        vec3 blended_normal = mix(normal, neighbor_normal, 0.5);
+        if (dot(blended_normal, blended_normal) > 1e-8)
+            normal = normalize(blended_normal);
+
+        vec3 blended_view_dir = mix(view_dir, neighbor_view_dir, 0.5);
+        if (dot(blended_view_dir, blended_view_dir) > 1e-8)
+            view_dir = normalize(blended_view_dir);
+    }
+
+    /* Optional RR guide for glass / transparent reflective surfaces.
+       Start with a conservative reconstruction of the pre-transparency color
+       from the same noisy HDR signal and the premultiplied transparent layer,
+       without tagging a separate transparency overlay. This matches NVIDIA's
+       recommendation to try ColorBeforeTransparency first when transparent
+       surfaces are problematic, while avoiding the earlier double-counting
+       regression from the transparency-layer experiments. */
+    vec3 rr_color_before_transparency = rr_color;
+    float base_alpha = clamp(transparent.a, 0.0, 0.9999);
+    float opaque_scale = max(1.0 - base_alpha, 1e-4);
+    rr_color_before_transparency =
+        max((rr_color - transparent.rgb) / opaque_scale, vec3(0.0));
+
+    /* RR can work with a checkerboard-resolved noisy color/motion pair, but the
+       auxiliary guides still need to describe the current primary pixel. The
+       old "pick brighter side" heuristic came from the legacy TAA path and can
+       make RR sample depth/normal/roughness/spec-distance from the opposite
+       split branch (reflection vs refraction), which matches the user-reported
+       broken mirrors / black holes / duplicated imagery. */
+    vec2 metallic_roughness = metallic_roughness_full.rg;
+    /* Q2RTX stores PT_VIEW_DEPTH as radial distance (length(view_pos)) and also
+       flips its sign on reflect/refract paths as an internal filter hint.
+       DLSS-RR expects the same projection-consistent depth space that underlies
+       screen reprojection, i.e. actual camera-space Z (or HW depth), not radial
+       distance. Use the shaded world position to reconstruct true view-space Z. */
+    vec3 shading_position_ws = texelFetch(TEX_PT_SHADING_POSITION, src_pos, 0).xyz;
+    float view_depth = abs((global_ubo.V * vec4(shading_position_ws, 1.0)).z);
+
+    float metallic = clamp(metallic_roughness.x, 0.0, 1.0);
+    float roughness = clamp(metallic_roughness.y, 0.0, 1.0);
+    float specular_factor = clamp(base_color.a, 0.0, 1.0);
+    float no_v = max(0.0, -dot(normalize(normal), normalize(view_dir)));
+
+    vec3 diffuse_albedo;
+    vec3 base_reflectivity;
+    get_reflectivity(base_color.rgb, metallic, diffuse_albedo, base_reflectivity);
+
+    vec3 specular_albedo = env_brdf_approx2(
+        clamp(base_reflectivity * specular_factor, vec3(0.0), vec3(1.0)),
+        roughness * roughness,
+        no_v);
+    specular_albedo = clamp(specular_albedo, vec3(0.0), vec3(1.0));
+
+    imageStore(IMG_FSR_EASU_OUTPUT, ipos, vec4(max(diffuse_albedo, vec3(0.0)), 1.0));
+    imageStore(IMG_FSR_RCAS_OUTPUT, ipos, vec4(max(specular_albedo, vec3(0.0)), 1.0));
+    imageStore(IMG_HQ_COLOR_INTERLEAVED, ipos, vec4(normalize(normal), 1.0));
+    imageStore(IMG_DLSS_RR_MOTION, ipos, vec4(motion, 0.0, 0.0));
+    imageStore(IMG_DLSS_RR_ROUGHNESS, ipos, vec4(roughness, 0.0, 0.0, 0.0));
+    imageStore(IMG_DLSS_RR_COLOR, ipos, vec4(max(rr_color, vec3(0.0)), 1.0));
+    imageStore(IMG_DLSS_RR_COLOR_BEFORE_TRANSPARENCY, ipos,
+        vec4(max(rr_color_before_transparency, vec3(0.0)), 1.0));
+    imageStore(IMG_DLSS_RR_DEPTH, ipos, vec4(view_depth, 0.0, 0.0, 0.0));
+    imageStore(IMG_DLSS_RR_SPEC_HIT_DIST, ipos, vec4(max(throughput_dist.a, 0.0), 0.0, 0.0, 0.0));
+    imageStore(IMG_DLSS_RR_SPEC_RAY_DIR_HIT_DIST, ipos,
+        vec4(normalize(view_dir), max(throughput_dist.a, 0.0)));
+    imageStore(IMG_DLSS_RR_SPEC_MOTION, ipos, vec4(spec_motion, 0.0, 0.0));
+}

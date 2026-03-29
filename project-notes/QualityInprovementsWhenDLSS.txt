@@ -1,0 +1,421 @@
+﻿```text
+You are working on the Q2RTX engine source code.
+
+Task: fix severe image blur / muddiness when using DLSS Super Resolution with aggressive modes, especially:
+- 4K output + Ultra Performance
+- 4K output + Performance
+- 4K output + Balanced
+
+Context:
+- DLSS SR is already integrated.
+- DLSS MFG is already integrated.
+- DLSS Ray Reconstruction is being integrated now / partially available.
+- Transformer-based DLSS presets are supported.
+- Current visual result is unacceptable: Q2RTX becomes very blurry, soft, muddy and loses too much texture/detail information under aggressive DLSS profiles.
+- This happens even with modern transformer presets, so assume the root cause is engine-side integration quality, texture/detail preservation, history management, mip/LOD behavior, motion/depth/jitter correctness, and pre-upscale blur.
+- The goal is NOT to replace DLSS.
+- The goal is NOT to hide the issue with a dumb fullscreen sharpen pass.
+- The goal IS to make Q2RTX remain as sharp, detailed and temporally stable as possible even under aggressive DLSS profiles.
+
+Primary objective:
+Make Q2RTX visually sharp and clean under aggressive DLSS SR profiles, with the main target being:
+- 4K output
+- Ultra Performance
+- MFG enabled
+- RR-compatible pipeline
+
+Secondary targets:
+- Performance
+- Balanced
+
+Success criteria:
+- Significantly reduce blur on walls, floors, props, decals, and high-frequency textures.
+- Improve clarity at grazing angles.
+- Improve perceived detail during camera motion.
+- Avoid obvious oversharpen halos.
+- Avoid introducing major shimmer, crawling, ghosting, or specular instability.
+- Preserve temporal stability.
+- Changes must be engine-level and tunable through cvars where appropriate.
+
+Strict priority order:
+1. Audit and fix all blur sources BEFORE DLSS.
+2. Audit and fix texture mip selection / texture LOD policy for DLSS.
+3. Audit and fix motion vectors, depth inputs, jitter, reprojection consistency.
+4. Audit and fix interactions between temporal accumulation, denoisers, RR, and DLSS SR.
+5. Improve texture sampling behavior specifically for aggressive DLSS profiles.
+6. Add diagnostics and deterministic A/B tools.
+7. Only after the above, consider small controlled detail enhancement if still necessary.
+
+Non-goals:
+- Do not replace DLSS with another upscaler.
+- Do not solve this primarily with CAS/sharpening/post sharpen.
+- Do not add offline asset upscaling tools.
+- Do not use RTX Remix.
+- Do not hand-wave the issue; identify root causes in code and pipeline.
+
+==================================================
+PHASE 1 — PIPELINE AUDIT: FIND WHERE THE BLUR ACTUALLY COMES FROM
+==================================================
+
+You must first determine whether the blur is caused by:
+- pre-DLSS blur
+- overly soft texture mip/LOD selection
+- weak texture filtering policy
+- motion vector errors
+- jitter mismatch
+- depth / linear depth issues
+- temporal accumulation over-smoothing
+- denoiser over-smoothing
+- double filtering when RR is enabled
+- post-DLSS handling
+
+Implement diagnostics and inspect the full render path.
+
+Required debug outputs / toggles:
+- pre-DLSS color visualization
+- post-DLSS color visualization
+- post-tonemap color visualization
+- motion vector visualization
+- depth visualization
+- linear depth visualization if RR path exists
+- current jitter index + jitter values
+- current DLSS mode
+- internal render resolution
+- output resolution
+- current accumulation frame count
+- RR enabled / disabled
+- MFG enabled / disabled
+- active denoisers
+- current mip bias values
+
+Add debug cvars (or equivalent engine controls), for example:
+- r_debug_pre_dlss_color
+- r_debug_post_dlss_color
+- r_debug_post_tonemap_color
+- r_debug_motion_vectors
+- r_debug_dlss_depth_input
+- r_debug_dlss_linear_depth
+- r_debug_dlss_overlay
+- r_debug_accumulation_state
+
+If similar debug systems already exist, extend them rather than duplicating.
+
+Expected outcome of Phase 1:
+- a clear mapping of where image softness is introduced
+- a list of confirmed root causes ranked by visual impact
+
+==================================================
+PHASE 2 — FIX DLSS INPUT QUALITY
+==================================================
+
+Audit the entire DLSS input contract.
+
+2.1 Motion vectors
+Validate and fix motion vectors for:
+- camera-only motion
+- static scene under camera movement
+- moving dynamic objects
+- first-person weapon / hands
+- alpha-tested geometry where relevant
+- particles / transparents if they affect final composite
+- any animated or transformed geometry path in the engine
+
+Motion vectors must:
+- be in the correct space/convention expected by the integration
+- have the correct sign and scale
+- be jitter-aware
+- cover all relevant geometry paths
+- not be missing on important visible elements
+- not be generated from stale matrices
+
+Pay special attention to:
+- first-person view model
+- weapon rendering path
+- any separate render passes
+- masked surfaces
+- per-object velocity omissions
+
+2.2 Jitter / reprojection consistency
+Verify:
+- jitter is applied exactly where intended
+- jitter is not applied twice
+- motion vectors correctly compensate for jitter
+- reprojection matrices are consistent across the pipeline
+- history reprojection and DLSS inputs agree on camera transforms
+
+2.3 Depth / linear depth
+Verify:
+- correct depth source is used
+- depth convention is correct for the integration
+- precision is sufficient
+- linear depth is correctly supplied for RR if RR path requires it
+- no invalid post-processed depth is accidentally used
+
+2.4 Resolution metadata
+Verify:
+- internal render size is correctly reported
+- output size is correctly reported
+- viewport / subrect values are correct
+- dynamic resolution / mode switching does not desync metadata
+
+Do not assume the DLSS SDK is wrong. Assume the engine-side inputs are the first suspect until verified.
+
+==================================================
+PHASE 3 — FIX TEXTURE DETAIL LOSS: DLSS-AWARE MIP / LOD POLICY
+==================================================
+
+This is a top-priority implementation area.
+
+Problem hypothesis:
+At low internal resolutions, the engine selects texture mips too conservatively, producing low-detail inputs before DLSS even starts reconstruction.
+
+You must implement a DLSS-aware texture LOD / mip bias policy.
+
+Requirements:
+- detect when DLSS SR is active
+- detect the active DLSS mode
+- compute a dynamic bias policy based on render resolution vs output resolution
+- allow per-texture-class tuning
+- clamp aggressively enough to avoid catastrophic shimmer
+- be safe by default
+- be tunable via cvars
+
+Texture classes to support if possible:
+- albedo / diffuse / base color
+- normal maps
+- roughness / specular / gloss-related textures
+- decals / signage / UI-like surfaces if relevant
+- any special-case materials known to blur badly
+
+Minimum controls to add:
+- r_dlss_mip_bias_enable
+- r_dlss_mip_bias_global
+- r_dlss_mip_bias_albedo
+- r_dlss_mip_bias_normal
+- r_dlss_mip_bias_specular
+- r_dlss_mip_bias_roughness
+- r_dlss_mip_bias_min
+- r_dlss_mip_bias_max
+- r_dlss_mip_bias_ultra_performance_scale
+- r_dlss_mip_bias_performance_scale
+- r_dlss_mip_bias_balanced_scale
+
+Optional but desirable:
+- angle-dependent bias adjustment
+- material-specific overrides
+- special handling for surfaces that dominate the scene visually
+
+Important:
+Do NOT make this a reckless global negative bias that creates huge shimmer. The implementation must aim for the best visual tradeoff under motion.
+
+==================================================
+PHASE 4 — REDUCE PRE-DLSS SOFTENING IN THE PATH TRACING / DENOISE / TEMPORAL PIPELINE
+==================================================
+
+The current image may already be too soft before DLSS.
+
+Audit all stages that may destroy high-frequency detail before the DLSS pass:
+- path tracing accumulation resolve
+- temporal accumulation
+- spatial denoisers
+- bilateral/ATrous-like filters if present
+- variance clamping
+- radiance clamping / history clamping
+- any low-pass filtering in resolve stages
+- any roughness/specular stabilization filters
+- any pre-upscale TAA-like behavior
+
+Your job:
+- identify which stages soften the image the most
+- reduce unnecessary smoothing
+- keep noise under control without smearing detail
+- ensure RR integration does not double-filter the image
+
+If RR is enabled or partially integrated:
+- identify denoisers that should be disabled or bypassed when RR is active
+- avoid running RR on already over-smoothed inputs
+- avoid retaining old hand-tuned denoisers in paths where RR should take over
+- ensure RR and existing accumulation logic do not stack into excessive temporal softness
+
+Add useful toggles:
+- r_rr_force_disable_denoisers
+- r_debug_denoiser_state
+- r_debug_temporal_accumulation
+- r_freeze_accumulation
+- r_freeze_dlss_history
+
+Expected outcome:
+- cleaner, more detailed pre-DLSS input
+- less “mushy” reconstruction under Ultra Performance
+
+==================================================
+PHASE 5 — IMPROVE TEXTURE SAMPLING / FILTERING FOR AGGRESSIVE DLSS MODES
+==================================================
+
+Audit texture sampling policy, especially where the current image looks worst.
+
+Check:
+- anisotropic filtering levels and defaults
+- min/mag filter configuration
+- grazing-angle texture behavior
+- normal map sampling softness
+- any custom sampler state bugs
+- any path where low internal resolution amplifies soft filtering
+
+Implement an optional aggressive sampling policy specifically for DLSS Ultra Performance / Performance:
+- better anisotropy where valuable
+- sharper but stable mip behavior
+- avoid destructive over-biasing
+- preserve temporal stability
+- avoid specular flicker
+
+Possible cvars:
+- r_dlss_sampling_boost_enable
+- r_dlss_sampling_boost_ultra_performance
+- r_dlss_sampling_boost_performance
+- r_dlss_force_max_aniso_when_upscaling
+
+This must be an engine-side improvement, not a fake fullscreen sharpen workaround.
+
+==================================================
+PHASE 6 — CONTROL TEMPORAL OVER-SMOOTHING
+==================================================
+
+The engine likely has multiple temporal systems interacting:
+- path tracing accumulation
+- temporal denoise / history filters
+- DLSS SR temporal reconstruction
+- RR temporal model
+- MFG-related frame generation context (if relevant to history timing)
+
+You must audit the combined temporal behavior and prevent double-smoothing.
+
+Investigate:
+- whether accumulation already destroys detail before SR
+- whether history weight is too strong
+- whether anti-firefly / clamping logic is too aggressive
+- whether RR + existing denoise + SR causes compounded softness
+- whether internal history buffers are lower quality than necessary
+
+Add debug controls:
+- r_freeze_camera
+- r_freeze_accumulation
+- r_freeze_dlss_history
+- r_debug_history_weights
+
+Expected outcome:
+- sharper stable motion
+- less trailing softness
+- less detail collapse under movement
+
+==================================================
+PHASE 7 — DETERMINISTIC COMPARISON TOOLS
+==================================================
+
+Do not rely on subjective eyeballing only.
+
+Add deterministic A/B comparison tools:
+- fixed camera path replay
+- screenshot capture hotkey with deterministic naming
+- rapid DLSS mode switching
+- easy comparison between:
+  - native
+  - DLAA if available
+  - Quality
+  - Balanced
+  - Performance
+  - Ultra Performance
+
+The goal is to compare the same frame / same motion path repeatedly and measure whether changes really improve detail.
+
+Overlay should show:
+- output resolution
+- internal resolution
+- DLSS mode
+- RR state
+- MFG state
+- active denoisers
+- accumulation frame count
+- mip bias values
+- relevant debug flags
+
+==================================================
+PHASE 8 — ONLY IF NEEDED: CONTROLLED DETAIL ENHANCEMENT
+==================================================
+
+Only after fixing the true causes above, if the image is still softer than desired, add a small optional detail recovery pass.
+
+Rules:
+- must be subtle
+- must be disabled by default unless proven beneficial
+- must not create haloing
+- must not be the primary solution
+- must not hide broken mip/LOD or broken motion vectors
+
+Possible cvar:
+- r_dlss_detail_recovery_strength
+
+Again: this is optional and low priority. Root-cause fixes come first.
+
+==================================================
+EXPECTED DELIVERABLES
+==================================================
+
+Return all of the following:
+
+1. Source diff / patch
+2. List of changed files
+3. List of added cvars / debug controls
+4. Short technical report with:
+   - root causes found
+   - fixes applied
+   - visual impact ranking
+   - remaining limitations
+5. Recommended default tuning values specifically for:
+   - 4K Ultra Performance
+   - 4K Performance
+   - 4K Balanced
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+This task is successful only if the following are true:
+
+Visual:
+- Q2RTX is noticeably sharper in 4K Ultra Performance.
+- Walls/floors/props retain much more texture detail.
+- Grazing-angle surfaces are less muddy.
+- Camera motion preserves more clarity.
+- Performance and Balanced also improve.
+
+Quality constraints:
+- no major new shimmer
+- no major new crawling
+- no major new ghosting
+- no obvious oversharpen halos
+- no severe specular instability
+
+Technical:
+- blur sources are identified, not guessed
+- DLSS inputs are audited and corrected where needed
+- DLSS-aware mip/LOD policy is implemented
+- pre-DLSS blur is reduced
+- RR-related denoiser overlap is addressed
+- diagnostics tooling is added
+
+==================================================
+IMPLEMENTATION STYLE REQUIREMENTS
+==================================================
+
+- Prefer small, reviewable, well-scoped commits or patch sections.
+- Do not rewrite unrelated systems.
+- Keep changes configurable.
+- Add comments where the reasoning is non-obvious.
+- If some parts of the pipeline are ambiguous, inspect and document before changing them.
+- When choosing between “aggressive sharpness” and “stable correctness”, prefer the best balanced result for real gameplay.
+- Focus on practical visual improvement in the actual game, not theoretical purity.
+
+Final instruction:
+Treat this as a real production rendering task. Do not respond with generic advice only. Inspect the code, identify the actual blur sources, implement the fixes, expose tuning controls, and return a usable patch plus a concise engineering report.
+```
