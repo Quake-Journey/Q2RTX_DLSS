@@ -1,6 +1,18 @@
 # Quake II RTX
 
-[![Build Status](https://github.com/NVIDIA/Q2RTX/actions/workflows/build.yml/badge.svg)](https://github.com/NVIDIA/Q2RTX/actions/workflows/build.yml)
+[![Build Status](https://github.com/Quake-Journey/Q2RTX_DLSS/actions/workflows/build.yml/badge.svg)](https://github.com/Quake-Journey/Q2RTX_DLSS/actions/workflows/build.yml)
+
+## Fork Notes
+
+This repository is the `Q2RTX_DLSS` fork maintained under `Quake-Journey`.
+
+It is based on the public NVIDIA **Quake II RTX** source tree, with local changes and bundled third-party source directories under `extern/`.
+
+Repository workflow notes:
+
+- Initial repository import can be done with [`push_to_q2rtx_dlss.ps1`](push_to_q2rtx_dlss.ps1).
+- Regular follow-up commits and pushes can be done with [`publish_changes.ps1`](publish_changes.ps1).
+- This repository is currently intended to be self-contained, so `extern/` contents are stored directly instead of being tracked as git submodules.
 
 **Quake II RTX** is NVIDIA's attempt at implementing a fully functional 
 version of Id Software's 1997 hit game **Quake II** with RTX path-traced 
@@ -45,9 +57,9 @@ original game.
   - Sunlight with direct and indirect illumination
   - Volumetric lighting (god-rays)
 
-You can download functional builds of the game from [GitHub Releases](https://github.com/NVIDIA/Q2RTX/releases).
+Upstream NVIDIA builds and media packages can be found in [GitHub Releases](https://github.com/NVIDIA/Q2RTX/releases).
 
-Latest development builds can be found in the [Actions](https://github.com/NVIDIA/Q2RTX/actions/workflows/build.yml) tab.
+Latest development builds for this fork can be found in the [Actions](https://github.com/Quake-Journey/Q2RTX_DLSS/actions/workflows/build.yml) tab.
 To run a development build, download the artifact, extract it and put `q2rtx_media.pkz`, `blue_noise.pkz` and the `pak*.pak` files from the original game into `baseq2/`.
 
 ## Additional Information
@@ -102,11 +114,15 @@ Note: Linux ppc64le is also known to work though not officially supported.
 | CMake <br> https://cmake.org/download/                  | 3.8         |
 | Vulkan SDK <br> https://www.lunarg.com/vulkan-sdk/      | 1.2.162     |
 
-## Submodules
+## Bundled Third-Party Sources
+
+This fork stores third-party source trees directly under `extern/` instead of relying on git submodules.
+
+Bundled upstream projects include:
 
 * [zlib](https://github.com/madler/zlib)
 * [curl](https://github.com/curl/curl)
-* [SDL2](https://github.com/spurious/SDL-mirror)
+* [SDL2](https://github.com/libsdl-org/SDL)
 * [stb](https://github.com/nothings/stb)
 * [tinyobjloader-c](https://github.com/syoyo/tinyobjloader-c)
 * [Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers)
@@ -115,9 +131,9 @@ Note: Linux ppc64le is also known to work though not officially supported.
 
 ## Build Instructions
 
-  1. Clone the repository and its submodules from git :
+  1. Clone the repository from git:
 
-     `git clone --recursive https://github.com/NVIDIA/Q2RTX.git `
+     `git clone https://github.com/Quake-Journey/Q2RTX_DLSS.git`
 
   2. Create a build folder named `build` under the repository root (`Q2RTX/build`)     
 

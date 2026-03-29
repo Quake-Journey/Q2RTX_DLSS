@@ -3,11 +3,23 @@
 .q2proded/
 .baseq2/
 .vscode/
+.idea/
 q2rtx
 q2rtxded
 game*.so
 *.swp
 build*/
+build/
+build-*/
+out/
+bin/
+obj/
+x64/
+Win32/
+Debug/
+Release/
+RelWithDebInfo/
+MinSizeRel/
 shader_vkpt
 *.exe
 *.ilk
@@ -18,6 +30,9 @@ shader_vkpt
 *.dll
 *.so
 *.log
+CMakeUserPresets.json
+CMakeSettings.json
+compile_commands.json
 music/
 *.sublime-*
 
