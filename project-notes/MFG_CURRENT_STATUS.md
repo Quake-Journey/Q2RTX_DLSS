@@ -2,6 +2,145 @@
 
 Дата фиксации: 2026-03-25
 
+## Обновление 2026-05-09, итоговая сводка Streamline 2.11.1
+
+Создан канонический итоговый статус по всему обновлению Streamline 2.11.1 / Q2RTX 0.9:
+
+- `O:\Claude2\Q2RTX-1.8.1-GPT\STREAMLINE_2_11_1_STATUS.md`
+
+Считать этот файл главным ориентиром перед продолжением работ по ветке Streamline/DLSS 0.9.
+В нём зафиксированы:
+
+- текущая проверенная runtime-сборка;
+- актуальные DLL Streamline / DLSS / DeepDVC / Reflex;
+- все внедрённые фишки;
+- статус меню и live-применения;
+- статус overlay;
+- исправленные баги;
+- ограничения;
+- ModDB NoPAK пакет;
+- публичная RU/EN документация;
+- промо-картинка;
+- рабочие правила на будущее.
+
+## Обновление 2026-05-09, промо-картинка Streamline 2.11.1
+
+Создана обновлённая промо-картинка рядом с исходником:
+- исходная картинка: `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX_DLSS_FG_RR.png`
+- новая картинка: `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX_Streamline_2_11_1_DLSS45_MFG6X_DeepDVC.png`
+- `SHA256`: `E537EAAE624EA521D01AF6641CECF4A66CA5A4116FCD725DE760A24E900A68EA`
+
+Смысл картинки:
+- сохранить старые крупные акценты `DLSS 4.5`, `Transformer 2`, `MFG`, `Ray Reconstruction`;
+- добавить новые фишки после внедрения Streamline 2.11.1: `MFG 5X/6X`, `Variable MFG`, `DeepDVC`, `Reflex FPS Cap`, live DLSS menu, modern overlay, variable max.
+
+## Обновление 2026-05-09, ModDB NoPAK пакет
+
+Подготовлен пакет для выкладки на ModDB без оригинальных `.pak` файлов.
+
+Обновлена публичная документация:
+- `O:\Claude2\Q2RTX-1.8.1-GPT\README_PUBLIC_BETA_RU.txt`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\README_PUBLIC_BETA_EN.txt`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\README_PUBLIC_BETA_RU.txt`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\README_PUBLIC_BETA_EN.txt`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\releases\Q2RTX-DLSS-Public-Beta-0.9-Streamline-2.11.1-NoPAK\README_PUBLIC_BETA_RU.txt`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\releases\Q2RTX-DLSS-Public-Beta-0.9-Streamline-2.11.1-NoPAK\README_PUBLIC_BETA_EN.txt`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\releases\Q2RTX-DLSS-Public-Beta-0.9-Streamline-2.11.1-NoPAK\README_PACKAGE.md`
+
+Пакетная папка:
+- `O:\Claude2\Q2RTX-1.8.1-GPT\releases\Q2RTX-DLSS-Public-Beta-0.9-Streamline-2.11.1-NoPAK\`
+
+Архив для выкладки:
+- `O:\Claude2\Q2RTX-1.8.1-GPT\releases\Q2RTX-DLSS-Public-Beta-0.9-Streamline-2.11.1-NoPAK.zip`
+- `SHA256`: `17F17FFFEF04BB6239ADDFCDE79AAA39DA5474CC0E275D71A745DDD61C20D644`
+- размер: `2479166898` bytes
+
+Контроль состава:
+- внутри архива нет `.pak`;
+- внутри архива нет `.pdb`;
+- не включены `baseq2\logs\`, `baseq2\save\`, `baseq2\condumps\`;
+- не включены backup-папки shader_vkpt;
+- включены свежие top-level `*.dll` и `*.exe` из текущей runtime-сборки `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\`;
+- включён свежий `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2rtx.menu`.
+
+Ключевые хэши в пакете:
+- `O:\Claude2\Q2RTX-1.8.1-GPT\releases\Q2RTX-DLSS-Public-Beta-0.9-Streamline-2.11.1-NoPAK\q2rtx.exe`
+  - `SHA256`: `9E93070B76497563E238558C4D41AB926224396B82E4D20A6A373D4B66B78079`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\releases\Q2RTX-DLSS-Public-Beta-0.9-Streamline-2.11.1-NoPAK\baseq2\q2rtx.menu`
+  - `SHA256`: `87AA5DBE4971C7F6E335031190C3723A15E157D34378D0BFDB665DBC952C8C65`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\releases\Q2RTX-DLSS-Public-Beta-0.9-Streamline-2.11.1-NoPAK\nvngx_dlss.dll`
+  - `SHA256`: `4E86DAD07A052A0672F231F98A11A463DA99239CA73E154D8E27951B260B99A8`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\releases\Q2RTX-DLSS-Public-Beta-0.9-Streamline-2.11.1-NoPAK\nvngx_dlssg.dll`
+  - `SHA256`: `83230804A087272C6D7EB4C805AC5925CE1188C70F150CC8DBD5CD843F53946A`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\releases\Q2RTX-DLSS-Public-Beta-0.9-Streamline-2.11.1-NoPAK\nvngx_deepdvc.dll`
+  - `SHA256`: `814BD287102FA0DBABA612FF94BE9023EA940210B5FBD2BAC2FABF7CB248B38A`
+
+## Обновление 2026-05-09, DeepDVC live в меню
+
+Исправлены две проблемы тестового меню:
+- `DeepDVC` больше не отключается из-за `qvk.frame_menu_mode`, поэтому параметры `flt_deepdvc`, `flt_deepdvc_intensity`, `flt_deepdvc_saturation_boost` из подменю `NVIDIA DLSS` доходят до Streamline live на загруженной карте с открытым меню;
+- в menu-mode DLSS SR-проход разрешён для обновления DeepDVC, но MFG при этом не тегается и принудительно уводится в off через `vkpt_dlss_force_mfg_off_for_menu()`;
+- overlay поверх меню теперь рисуется только при `cls.state == ca_active`, то есть только когда загружена игровая карта.
+
+Изменённые исходники:
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\refresh\vkpt\dlss.c`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\refresh\vkpt\main.c`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\client\screen.c`
+
+Runtime для проверки:
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\q2rtx.exe`
+  - `SHA256`: `9E93070B76497563E238558C4D41AB926224396B82E4D20A6A373D4B66B78079`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\gamex86_64.dll`
+  - `SHA256`: `FFD8BEEE397C8AC9689343C98A0EF60374C465A5962ABF4F8CB428C2BC065335`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2rtx.menu`
+  - `SHA256`: `87AA5DBE4971C7F6E335031190C3723A15E157D34378D0BFDB665DBC952C8C65`
+
+Проверка:
+- `git -C O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src diff --check -- src/client/screen.c src/refresh/vkpt/dlss.c src/refresh/vkpt/main.c`
+- `$env:VULKAN_SDK='O:\Claude2\Vulkan\SDK'; cmake --build 'O:\Claude2\Q2RTX-1.8.1-GPT\build-claude-off' --config Release -- /maxcpucount`
+
+## Обновление 2026-05-09, уточнение overlay
+
+Уточнено поведение DLSS/FPS performance overlay:
+- overlay больше не привязан к открытому подменю `NVIDIA DLSS`;
+- при запущенной игровой карте без меню overlay рисуется штатно через игровой HUD;
+- при любом открытом меню overlay дополнительно рисуется поверх меню, если соответствующее отображение включено настройками меню (`r_debug_dlss_overlay` для DLSS debug overlay и/или `scr_fps` для FPS).
+
+Runtime для проверки:
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\q2rtx.exe`
+  - `SHA256`: `31BF0048539D43474CCE76928988E386A0F10C76FA18A4B6DC7167DAA8D9B869`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\gamex86_64.dll`
+  - `SHA256`: `FFD8BEEE397C8AC9689343C98A0EF60374C465A5962ABF4F8CB428C2BC065335`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2rtx.menu`
+  - `SHA256`: `87AA5DBE4971C7F6E335031190C3723A15E157D34378D0BFDB665DBC952C8C65`
+
+## Обновление 2026-05-09
+
+Сделана косметическая/тестовая доработка DLSS-меню:
+- в парсер меню добавлен флаг `--live` для cvar-backed пунктов `toggle`, `pairs`, `values/strings` и `range`;
+- все параметры подменю `NVIDIA DLSS` в `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\baseq2\q2rtx.menu` помечены `--live`, поэтому изменения применяются сразу при переключении или движении слайдера, без закрытия меню;
+- DLSS/FPS performance overlay теперь дополнительно рисуется поверх активного подменю `NVIDIA DLSS`, чтобы его можно было смотреть вместе с прозрачным меню.
+
+Основные исходники:
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\client\ui\script.c`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\client\ui\menu.c`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\client\ui\ui.c`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\client\screen.c`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\inc\client\ui.h`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\client\ui\ui.h`
+
+Runtime для проверки разложен в полную папку с `.pak`:
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\q2rtx.exe`
+  - `SHA256`: `6BE937AB9BE2509EC54AB99C194161552DB19FC9C3C98248D379DE0C4A702DF3`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\gamex86_64.dll`
+  - `SHA256`: `FFD8BEEE397C8AC9689343C98A0EF60374C465A5962ABF4F8CB428C2BC065335`
+- `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2rtx.menu`
+  - `SHA256`: `87AA5DBE4971C7F6E335031190C3723A15E157D34378D0BFDB665DBC952C8C65`
+
+Проверка:
+- `git -C O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src diff --check -- src/client/ui/menu.c src/client/ui/script.c src/client/ui/ui.h inc/client/ui.h src/client/ui/ui.c src/client/screen.c baseq2/q2rtx.menu`
+- `$env:VULKAN_SDK='O:\Claude2\Vulkan\SDK'; cmake --build 'O:\Claude2\Q2RTX-1.8.1-GPT\build-claude-off' --config Release -- /maxcpucount`
+
 ## Главное
 Сейчас активная проблема не в том, что DLSS-G/MFG не включается.
 MFG работает, но масштабируется плохо:
@@ -779,3 +918,166 @@ MFG работает, но масштабируется плохо:
 - Goal of the next condump: first true apples-to-apples comparison of `0X` vs `2X/3X/4X` for `driver`, `osq`, `gpu`, and `gpu_frame`.
 - Fresh Release rebuilt from `build-claude-off` and copied to runtime.
 - Previous runtime preserved as `Q2RTX\\q2rtx_before_mode0_reflex_diag.exe`.
+
+## 2026-05-08
+- Current accepted test workflow:
+  - runtime with pak files lives at `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX`;
+  - source lives at `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src`;
+  - build tree lives at `O:\Claude2\Q2RTX-1.8.1-GPT\build-claude-off`;
+  - reports to the user must include full local paths.
+- Streamline 2.11.1 is now the project runtime baseline for Q2RTX DLSS beta 0.9.
+- Integrated MFG 5X/6X and Variable MFG controls:
+  - `flt_dlss_mfg` remains the fixed multiplier or the on/off switch for Variable;
+  - `flt_dlss_mfg_policy` selects fixed/auto/dynamic;
+  - `flt_dlss_mfg_dynamic_max` is the separate Variable MFG max multiplier;
+  - `flt_dlss_mfg_dynamic_target_fps` is the Variable target FPS, with 0 meaning display-refresh auto.
+- Fixed Variable MFG multiplier coupling:
+  - when policy is dynamic, Streamline no longer receives the ordinary fixed multiplier as the target multiplier;
+  - the normal multiplier only enables/disables MFG, while `flt_dlss_mfg_dynamic_max` supplies the ceiling.
+- Overlay now reports MFG state, runtime cap, requested/effective policy and Reflex on a separate line below MFG.
+- Native Dynamic MFG availability was removed from the overlay because this Q2RTX integration is Vulkan-only and Streamline 2.11.1 native Dynamic MFG is not active on Vulkan.
+- DLSS menu now exposes `r_maxfps` as `Max FPS` near the top of `Video -> NVIDIA DLSS`, range `0..1000`, with `0` meaning disabled.
+- Streamline 2.11.1 follow-up implementation for the current build:
+  - explicitly load PCL as a Streamline feature because Q2RTX depends on PCL markers for Reflex/DLSS-G pacing;
+  - expose Reflex's driver-aware FPS limiter through `ReflexOptions::frameLimitUs`, cvar `flt_dlss_reflex_fps_cap`;
+  - expose Vulkan DLSS-G queue parallelism (`DLSSGOptions::queueParallelismMode`) as opt-in cvar `flt_dlss_mfg_queue_parallelism`, default off.
+- Deferred:
+  - DeepDVC needs a careful post-tonemap, pre-HUD/UI evaluate point;
+  - NIS is lower priority because Q2RTX already has DLSS and FSR upscale paths;
+  - DirectSR is not applicable to this Vulkan renderer because Streamline DirectSR is D3D12-only.
+- Fresh Release rebuilt from `O:\Claude2\Q2RTX-1.8.1-GPT\build-claude-off` and copied to runtime with pak files:
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\q2rtx.exe`
+    - SHA256: `45A3FF877B806FE846CEC3CCB5FFD2D56A2350482D676B7D876F73C007431CAF`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\gamex86_64.dll`
+    - SHA256: `FFD8BEEE397C8AC9689343C98A0EF60374C465A5962ABF4F8CB428C2BC065335`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2rtx.menu`
+    - SHA256: `E8F3809A6383F793D28540F9BE6DC1F89B0FEB940866E95D56E92A138A8867EB`
+
+## 2026-05-09
+- Overlay cleanup:
+  - removed `native dynamic unavailable/available` from the DLSS overlay because Q2RTX is currently Vulkan-only and Streamline 2.11.1 native Dynamic MFG is not active on Vulkan.
+- Menu cleanup:
+  - added `Max FPS` to the top of `Video -> NVIDIA DLSS`;
+  - cvar: `r_maxfps`;
+  - range: `0..1000`;
+  - `0` means disabled/unlimited.
+- Regression fix:
+  - `flt_dlss_mfg_queue_parallelism` was found saved as `1` in `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2config.cfg`;
+  - this experimental Streamline `eBlockNoClientQueues` path can collapse render pacing toward 10 FPS in the current Vulkan submit/present path;
+  - menu entry `DLSS MFG queue mode` was removed;
+  - code now keeps the cvar for config compatibility but forces the safe default value `0`.
+- Fresh Release rebuilt from `O:\Claude2\Q2RTX-1.8.1-GPT\build-claude-off` and copied to runtime with pak files:
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\q2rtx.exe`
+    - SHA256: `D1AE078EA9F59359F6AF05F128749BF0CE072491541D3BE28D7CD363DD158931`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\gamex86_64.dll`
+    - SHA256: `FFD8BEEE397C8AC9689343C98A0EF60374C465A5962ABF4F8CB428C2BC065335`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2rtx.menu`
+    - SHA256: `E6641173BB233D5FE4C123164A3F28E4F6A9D8723FEFF74A75FEF4F1CC2B5527`
+
+## 2026-05-09 hotfix
+- User reported render FPS trending to ~10 even with `r_maxfps 1000`.
+- Confirmed `r_maxfps` is the stock Q2RTX cvar from `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\client\main.c`; only the menu entry was added.
+- Runtime config at `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2config.cfg` had:
+  - `r_maxfps "1000"`;
+  - `flt_dlss_mfg_fps_cap "0"`;
+  - `flt_dlss_reflex_fps_cap "0"`;
+  - `flt_dlss_mfg_queue_parallelism "1"`.
+- Temporary hotfix for testing:
+  - removed `DLSS MFG queue mode` from the menu;
+  - kept `flt_dlss_mfg_queue_parallelism` only for config compatibility;
+  - forced `vkpt_dlss_get_mfg_queue_parallelism()` to return `0`, so Streamline `eBlockNoClientQueues` is not activated even if old config has `1`.
+- Fresh Release copied to runtime with pak files:
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\q2rtx.exe`
+    - SHA256: `309634C3D2BBC3B4C854EDEE994588CC682A1ABBA8BA11383049AF18292E0C96`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\gamex86_64.dll`
+    - SHA256: `FFD8BEEE397C8AC9689343C98A0EF60374C465A5962ABF4F8CB428C2BC065335`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2rtx.menu`
+    - SHA256: `1719A601C24C81A9067D3E4C8179A30FA3BEA62BFD4BA096FCE563B52EC970E3`
+
+## 2026-05-09 queue parallelism restored
+- User confirmed the 10 FPS regression did not reproduce after the hotfix, so `flt_dlss_mfg_queue_parallelism` is restored as a real option rather than a forced-off compatibility cvar.
+- Restored:
+  - `DLSS MFG queue mode` in `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\baseq2\q2rtx.menu`;
+  - overlay token `queue default/parallel` in `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\refresh\vkpt\main.c`;
+  - `vkpt_dlss_get_mfg_queue_parallelism()` returning the cvar value in `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\refresh\vkpt\dlss.c`.
+- Runtime config prepared for immediate test:
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2config.cfg`
+  - `flt_dlss_mfg_queue_parallelism "1"`.
+- Fresh Release copied to runtime with pak files:
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\q2rtx.exe`
+    - SHA256: `0B3C6333A62FA76220D38435263C107D2226255376001A6E155A0C28D1A60599`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\gamex86_64.dll`
+    - SHA256: `FFD8BEEE397C8AC9689343C98A0EF60374C465A5962ABF4F8CB428C2BC065335`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2rtx.menu`
+    - SHA256: `E6641173BB233D5FE4C123164A3F28E4F6A9D8723FEFF74A75FEF4F1CC2B5527`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2config.cfg`
+    - SHA256: `66657FC527A5789038D312CF98394775C481C00A246BD4565F18D8893C75BC6B`
+
+## 2026-05-09 DeepDVC / RTX Dynamic Vibrance
+- User approved implementing only DeepDVC from the remaining Streamline 2.11.1 features.
+- Implemented Streamline `sl::kFeatureDeepDVC` loading and support query in:
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\refresh\vkpt\dlss_sl.cpp`
+- Runtime DeepDVC files are present:
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\sl.deepdvc.dll`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\nvngx_deepdvc.dll`
+- Added cvars:
+  - `flt_deepdvc`
+  - `flt_deepdvc_intensity`
+  - `flt_deepdvc_saturation_boost`
+  - `flt_deepdvc_available`
+- Added menu controls in:
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\baseq2\q2rtx.menu`
+  - menu path: `Video -> NVIDIA DLSS -> RTX Dynamic Vibrance`
+- Render integration:
+  - DeepDVC evaluates after tone mapping and before final blit/HUD;
+  - on DLSS SR/RR paths it runs before the DLSS-G `HUDLessColor` resource tag, so MFG sees the processed color buffer;
+  - supported sources: DLSS SR output, DLSS RR final TAA output, FSR output, final-resolution TAA output;
+  - HDR/scRGB, `tm_enable 0`, menu frame, or non-final-resolution source disable the feature for that frame.
+- Fresh Release copied to runtime with pak files:
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\q2rtx.exe`
+    - SHA256: `4637C8460AB5F0806A155E8068B52031248FCB2A5136800FFDB1CD4C088CDF27`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\gamex86_64.dll`
+    - SHA256: `FFD8BEEE397C8AC9689343C98A0EF60374C465A5962ABF4F8CB428C2BC065335`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2rtx.menu`
+    - SHA256: `26937CFF78A9707F22E0817404E2E5F93B540527B08915829A03238904CB6508`
+
+## 2026-05-09 Menu opacity control
+- Ported q2pro-style runtime menu background opacity control as `cl_menu_alpha`.
+- Source changes:
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\client\ui\menu.c`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\client\ui\ui.c`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\baseq2\q2rtx.menu`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\doc\client.md`
+- Behavior:
+  - `cl_menu_alpha 1` keeps the original menu opacity;
+  - lower values multiply only menu background/decorative surfaces;
+  - menu text and selectable controls remain readable;
+  - the Video menu now contains a `menu opacity` slider for `cl_menu_alpha`.
+- Build/copy status:
+  - Release build succeeded from `O:\Claude2\Q2RTX-1.8.1-GPT\build-claude-off`
+  - copied to runtime with pak files:
+    - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\q2rtx.exe`
+      - SHA256: `1503DA8DFCA30A513F4208683D234D5F005323719AB59BBE7CD0440A33DE7B61`
+    - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\gamex86_64.dll`
+      - SHA256: `FFD8BEEE397C8AC9689343C98A0EF60374C465A5962ABF4F8CB428C2BC065335`
+    - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2rtx.menu`
+      - SHA256: `05B4DB37D802325D4CA98730E9860B5FC6D7C10476CBA14A5146E2B6B801148A`
+
+## 2026-05-09 Menu opacity follow-up
+- User reported that `menu opacity` still showed Q2RTX's blurred menu backdrop, so the live opacity slider did not reveal the real game image clearly.
+- Follow-up change:
+  - when `cl_menu_alpha < 1`, Q2RTX no longer forces menu bloom/blur or HDR menu clamp;
+  - `cl_menu_alpha 1` keeps the original Q2RTX menu backdrop behavior.
+- Source changes:
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\refresh\vkpt\bloom.c`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\refresh\vkpt\main.c`
+  - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX-src\src\refresh\vkpt\vkpt.h`
+- Build/copy status:
+  - Release build succeeded from `O:\Claude2\Q2RTX-1.8.1-GPT\build-claude-off`
+  - copied to runtime with pak files:
+    - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\q2rtx.exe`
+      - SHA256: `24C286DD019C1A6B9A8ABED8D92857D04AEA6266C6281E37EB117615E49E04B8`
+    - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\gamex86_64.dll`
+      - SHA256: `FFD8BEEE397C8AC9689343C98A0EF60374C465A5962ABF4F8CB428C2BC065335`
+    - `O:\Claude2\Q2RTX-1.8.1-GPT\Q2RTX\baseq2\q2rtx.menu`
+      - SHA256: `05B4DB37D802325D4CA98730E9860B5FC6D7C10476CBA14A5146E2B6B801148A`

@@ -16,15 +16,18 @@
 #include <math.h>
 
 extern bool scr_timerefresh_active;
+extern cvar_t *cvar_tm_enable;
 
 /* ---- C++ bridge symbols from dlss_sl.cpp ---- */
 extern int g_dlss_sl_available;
 extern int g_dlss_sl_rr_available;
 extern int g_dlss_sl_g_available;
+extern int g_dlss_sl_deepdvc_available;
 extern int g_dlss_sl_init_result;
 extern int g_dlss_sl_sr_result;
 extern int g_dlss_sl_rr_result;
 extern int g_dlss_sl_g_result;
+extern int g_dlss_sl_deepdvc_result;
 extern int g_dlss_sl_setvk_result;
 
 extern int dlss_sl_startup(int want_mfg);
@@ -59,7 +62,7 @@ extern void dlss_sl_rr_set_options(int mode, int preset,
     uint32_t out_w, uint32_t out_h,
     const float *world_to_camera_view,
     const float *camera_view_to_world);
-extern void dlss_sl_set_g_options(int mfg_mode,
+extern void dlss_sl_set_g_options(int mfg_mode, int mfg_policy, float dynamic_target_fps,
     uint32_t color_w, uint32_t color_h,
     uint32_t mvec_w,  uint32_t mvec_h,
     uint32_t num_backbuffers,
@@ -68,7 +71,8 @@ extern void dlss_sl_set_g_options(int mfg_mode,
     uint32_t depth_fmt,
     uint32_t hudless_fmt,
     uint32_t ui_fmt,
-    int dynamic_resolution);
+    int dynamic_resolution,
+    int queue_parallelism);
 extern void dlss_sl_begin_frame(uint32_t frame_index);
 extern void dlss_sl_set_constants(
     const float *view_to_clip, const float *clip_to_view,
@@ -114,7 +118,7 @@ extern void dlss_sl_tag_g_resources(VkCommandBuffer cmd_buf,
     uint32_t display_w, uint32_t display_h,
     uint32_t backbuffer_x, uint32_t backbuffer_y);
 extern int  g_dlss_sl_reflex_available;
-extern void dlss_sl_reflex_set_options(int mode);
+extern void dlss_sl_reflex_set_options(int mode, int fps_cap);
 extern void dlss_sl_reflex_sleep(void);
 extern void dlss_sl_reflex_mark_simulation_start(void);
 extern void dlss_sl_reflex_mark_simulation_end(void);
@@ -127,6 +131,8 @@ extern int  dlss_sl_get_display_fps(void);
 extern int  dlss_sl_get_display_multiplier(void);
 extern uint64_t dlss_sl_get_total_presented_frames(void);
 extern int  dlss_sl_get_mfg_cap(void);
+extern int  dlss_sl_get_mfg_dynamic_supported(void);
+extern int  dlss_sl_get_effective_mfg_policy(void);
 extern int  dlss_sl_get_effective_reflex_mode(void);
 extern int  dlss_sl_get_last_dlssg_status(void);
 extern int  dlss_sl_get_last_dlssg_frames_presented(void);
@@ -136,23 +142,43 @@ extern void dlss_sl_wait_for_g_inputs_consumed(void);
 extern const char* dlss_sl_get_sr_dll_version(void);
 extern const char* dlss_sl_get_rr_dll_version(void);
 extern const char* dlss_sl_get_fg_dll_version(void);
+extern const char* dlss_sl_get_dvc_dll_version(void);
+extern void dlss_sl_deepdvc_set_options(int enabled, float intensity, float saturation_boost);
+extern void dlss_sl_deepdvc_tag_resource(VkCommandBuffer cmd_buf,
+    VkImage color, VkImageView color_view,
+    uint32_t layout_color, uint32_t fmt_color,
+    uint32_t resource_w, uint32_t resource_h,
+    uint32_t valid_w, uint32_t valid_h);
+extern void dlss_sl_deepdvc_evaluate(VkCommandBuffer cmd_buf);
+extern uint64_t dlss_sl_deepdvc_get_estimated_vram(void);
 
 /* ---- Console variables ---- */
 static cvar_t *cvar_dlss_enable  = NULL;  /* 0=off, 1=on                          */
 static cvar_t *cvar_dlss_mode    = NULL;  /* DlssMode_t value (1-6)               */
-static cvar_t *cvar_dlss_preset  = NULL;  /* DlssPreset_t value (0=default, 8=K)  */
+static cvar_t *cvar_dlss_preset  = NULL;  /* DlssPreset_t value (0=recommended, 8=K) */
 static cvar_t *cvar_dlss_rr_preset = NULL; /* RR preset: 0=default, 4=D, 5=E       */
 static cvar_t *cvar_dlss_rr      = NULL;  /* 0=off, 1=on                          */
-static cvar_t *cvar_dlss_mfg     = NULL;  /* DlssMfgMode_t: 0=off 2=2X 3=3X 4=4X */
+static cvar_t *cvar_dlss_mfg     = NULL;  /* DlssMfgMode_t: 0=off 2=2X ... 6=6X */
+static cvar_t *cvar_dlss_mfg_policy = NULL; /* DlssMfgPolicy_t: fixed/auto/dynamic */
+static cvar_t *cvar_dlss_mfg_dynamic_max = NULL; /* 0=runtime cap, 2..6=max for dynamic/auto fallback */
+static cvar_t *cvar_dlss_mfg_dynamic_target_fps = NULL; /* 0=display refresh auto */
 static cvar_t *cvar_dlss_mfg_fps_cap = NULL; /* 0=off, otherwise caps render FPS */
+static cvar_t *cvar_dlss_mfg_queue_parallelism = NULL; /* 0=default, 1=DLSS-G blocks no client queues */
 static cvar_t *cvar_dlss_reflex  = NULL;  /* DlssReflexMode_t: 0=off 1=on 2=boost */
+static cvar_t *cvar_dlss_reflex_fps_cap = NULL; /* 0=off, otherwise Reflex driver-aware FPS cap */
 static cvar_t *cvar_dlss_sharpness = NULL; /* DLSS sharpening in [0,1] */
 static cvar_t *cvar_dlss_auto_exposure = NULL; /* 0=manual, 1=auto */
 static cvar_t *cvar_dlss_custom_ratio = NULL; /* custom DLSS render scale in percent */
+static cvar_t *cvar_deepdvc_enable = NULL; /* 0=off, 1=RTX Dynamic Vibrance on */
+static cvar_t *cvar_deepdvc_intensity = NULL; /* DeepDVC intensity [0,1] */
+static cvar_t *cvar_deepdvc_saturation_boost = NULL; /* DeepDVC saturation boost [0,1] */
 static cvar_t *cvar_dlss_available = NULL; /* DLSS SR supported on this GPU/runtime */
 static cvar_t *cvar_dlss_rr_available = NULL; /* DLSS RR supported on this GPU/runtime */
-static cvar_t *cvar_dlss_mfg_max_count_for_device = NULL;  /* 0=unsupported, 2=2X only, 4=2X/3X/4X */
+static cvar_t *cvar_deepdvc_available = NULL; /* DeepDVC supported on this GPU/runtime */
+static cvar_t *cvar_dlss_mfg_max_count_for_device = NULL;  /* 0=unsupported, 2..6=max display multiplier */
 static cvar_t *cvar_dlss_mfg_cap_compat = NULL;  /* compatibility alias */
+static cvar_t *cvar_dlss_mfg_dynamic_supported = NULL; /* runtime dynamic MFG support */
+static cvar_t *cvar_dlss_mfg_policy_effective = NULL; /* runtime effective MFG policy */
 static cvar_t *cvar_dlss_reflex_effective = NULL; /* effective runtime mode after enforcement */
 static cvar_t *cvar_dlss_sl_debug_log = NULL; /* 0=off, 1=write sl_debug.log */
 
@@ -164,6 +190,8 @@ static bool s_vk_info_set = false;
 static bool s_prev_reset = true;
 /* Tracks whether Reflex options have been applied at least once this session */
 static bool s_reflex_applied = false;
+/* Tracks whether DeepDVC was enabled in Streamline options last frame */
+static bool s_deepdvc_applied = false;
 /* GPU-generation fallback for MFG menu gating before DLSS-G state is queried */
 static int  s_detected_mfg_cap = 0;
 
@@ -197,19 +225,30 @@ void vkpt_dlss_init_cvars(void)
 {
     cvar_dlss_enable = Cvar_Get("flt_dlss_enable", "0", CVAR_ARCHIVE);
     cvar_dlss_mode   = Cvar_Get("flt_dlss_mode",   "4", CVAR_ARCHIVE); /* Quality */
-    cvar_dlss_preset = Cvar_Get("flt_dlss_preset",  "8", CVAR_ARCHIVE); /* Preset K (Transformer) */
+    cvar_dlss_preset = Cvar_Get("flt_dlss_preset",  "0", CVAR_ARCHIVE); /* Recommended DLSS 4 preset per mode */
     cvar_dlss_rr_preset = Cvar_Get("flt_dlss_rr_preset", "4", CVAR_ARCHIVE); /* Preset D for RR */
     cvar_dlss_rr     = Cvar_Get("flt_dlss_rr",     "0", CVAR_ARCHIVE); /* RR off by default */
     cvar_dlss_mfg    = Cvar_Get("flt_dlss_mfg",    "0", CVAR_ARCHIVE); /* MFG off by default */
+    cvar_dlss_mfg_policy = Cvar_Get("flt_dlss_mfg_policy", "0", CVAR_ARCHIVE);
+    cvar_dlss_mfg_dynamic_max = Cvar_Get("flt_dlss_mfg_dynamic_max", "0", CVAR_ARCHIVE);
+    cvar_dlss_mfg_dynamic_target_fps = Cvar_Get("flt_dlss_mfg_dynamic_target_fps", "0", CVAR_ARCHIVE);
     cvar_dlss_mfg_fps_cap = Cvar_Get("flt_dlss_mfg_fps_cap", "0", CVAR_ARCHIVE);
+    cvar_dlss_mfg_queue_parallelism = Cvar_Get("flt_dlss_mfg_queue_parallelism", "0", CVAR_ARCHIVE);
     cvar_dlss_reflex = Cvar_Get("flt_dlss_reflex", "0", CVAR_ARCHIVE); /* Reflex off by default */
+    cvar_dlss_reflex_fps_cap = Cvar_Get("flt_dlss_reflex_fps_cap", "0", CVAR_ARCHIVE);
     cvar_dlss_sharpness = Cvar_Get("flt_dlss_sharpness", "0.0", CVAR_ARCHIVE);
     cvar_dlss_auto_exposure = Cvar_Get("flt_dlss_auto_exposure", "1", CVAR_ARCHIVE);
     cvar_dlss_custom_ratio = Cvar_Get("flt_dlss_custom_ratio", "77", CVAR_ARCHIVE);
+    cvar_deepdvc_enable = Cvar_Get("flt_deepdvc", "0", CVAR_ARCHIVE);
+    cvar_deepdvc_intensity = Cvar_Get("flt_deepdvc_intensity", "0.5", CVAR_ARCHIVE);
+    cvar_deepdvc_saturation_boost = Cvar_Get("flt_deepdvc_saturation_boost", "0.25", CVAR_ARCHIVE);
     cvar_dlss_available = Cvar_Get("flt_dlss_available", "0", CVAR_ROM | CVAR_NOARCHIVE);
     cvar_dlss_rr_available = Cvar_Get("flt_dlss_rr_available", "0", CVAR_ROM | CVAR_NOARCHIVE);
+    cvar_deepdvc_available = Cvar_Get("flt_deepdvc_available", "0", CVAR_ROM | CVAR_NOARCHIVE);
     cvar_dlss_mfg_max_count_for_device = Cvar_Get("flt_dlss_mfg_max_count_for_device", "0", CVAR_ROM);
     cvar_dlss_mfg_cap_compat = Cvar_Get("flt_dlss_mfg_cap", "0", CVAR_ROM);
+    cvar_dlss_mfg_dynamic_supported = Cvar_Get("flt_dlss_mfg_dynamic_supported", "0", CVAR_ROM | CVAR_NOARCHIVE);
+    cvar_dlss_mfg_policy_effective = Cvar_Get("flt_dlss_mfg_policy_effective", "0", CVAR_ROM | CVAR_NOARCHIVE);
     cvar_dlss_reflex_effective = Cvar_Get("flt_dlss_reflex_effective", "0", CVAR_ROM | CVAR_NOARCHIVE);
     cvar_dlss_sl_debug_log = Cvar_Get("flt_dlss_sl_debug_log", "0", CVAR_ARCHIVE);
 }
@@ -228,9 +267,23 @@ static float clamp_dlss_sharpness(float sharpness)
     return sharpness;
 }
 
+static float clamp_unit_float(float value)
+{
+    if (value < 0.0f) return 0.0f;
+    if (value > 1.0f) return 1.0f;
+    return value;
+}
+
 static int clamp_bool_cvar_value(int value)
 {
     return value ? 1 : 0;
+}
+
+static int clamp_reflex_fps_cap(int fps)
+{
+    if (fps < 0) return 0;
+    if (fps > 1000) return 1000;
+    return fps;
 }
 
 static int clamp_dlss_custom_ratio_percent(int value)
@@ -291,7 +344,10 @@ DlssMode_t vkpt_dlss_get_effective_streamline_mode(void)
 
 static int normalize_runtime_mfg_cap(int runtime_cap)
 {
+    if (runtime_cap >= 5) return DLSS_MFG_6X;
+    if (runtime_cap >= 4) return DLSS_MFG_5X;
     if (runtime_cap >= 3) return DLSS_MFG_4X;
+    if (runtime_cap >= 2) return DLSS_MFG_3X;
     if (runtime_cap >= 1) return DLSS_MFG_2X;
     return DLSS_MFG_OFF;
 }
@@ -308,7 +364,7 @@ static int detect_mfg_cap_from_gpu(void)
         return DLSS_MFG_OFF;
 
     if (strstr(props.deviceName, "RTX 50"))
-        return DLSS_MFG_4X;
+        return DLSS_MFG_6X;
     if (strstr(props.deviceName, "RTX 40"))
         return DLSS_MFG_2X;
 
@@ -326,22 +382,49 @@ static int get_effective_mfg_cap(void)
 
 static int clamp_mfg_mode_to_cap(int mode, int cap)
 {
-    if (mode != DLSS_MFG_2X && mode != DLSS_MFG_3X && mode != DLSS_MFG_4X)
+    if (mode < DLSS_MFG_2X || mode > DLSS_MFG_6X)
         return DLSS_MFG_OFF;
 
     if (cap <= DLSS_MFG_OFF)
         return DLSS_MFG_OFF;
-    if (cap <= DLSS_MFG_2X)
-        return DLSS_MFG_2X;
+    if (cap < DLSS_MFG_2X)
+        return DLSS_MFG_OFF;
+    if (cap > DLSS_MFG_6X)
+        cap = DLSS_MFG_6X;
+    if (mode > cap)
+        return cap;
 
     return mode;
 }
 
 static int clamp_mfg_mode_raw(int mode)
 {
-    if (mode != DLSS_MFG_2X && mode != DLSS_MFG_3X && mode != DLSS_MFG_4X)
+    if (mode < DLSS_MFG_2X || mode > DLSS_MFG_6X)
         return DLSS_MFG_OFF;
     return mode;
+}
+
+static int clamp_mfg_dynamic_max_raw(int mode)
+{
+    if (mode == 0)
+        return 0;
+    return clamp_mfg_mode_raw(mode);
+}
+
+static int clamp_mfg_policy(int policy)
+{
+    if (policy < DLSS_MFG_POLICY_FIXED || policy >= DLSS_MFG_POLICY_COUNT)
+        return DLSS_MFG_POLICY_FIXED;
+    return policy;
+}
+
+static float clamp_mfg_dynamic_target_fps(float fps)
+{
+    if (fps < 0.0f)
+        return 0.0f;
+    if (fps > 1000.0f)
+        return 1000.0f;
+    return fps;
 }
 
 static int get_user_requested_mfg_mode(void)
@@ -349,6 +432,13 @@ static int get_user_requested_mfg_mode(void)
     if (!cvar_dlss_mfg)
         return DLSS_MFG_OFF;
     return clamp_mfg_mode_raw(cvar_dlss_mfg->integer);
+}
+
+static int get_user_requested_mfg_dynamic_max(void)
+{
+    if (!cvar_dlss_mfg_dynamic_max)
+        return 0;
+    return clamp_mfg_dynamic_max_raw(cvar_dlss_mfg_dynamic_max->integer);
 }
 
 static int get_desired_reflex_mode(void)
@@ -364,10 +454,18 @@ static void sync_status_cvars(void)
     if (cvar_dlss_rr_available)
         Cvar_SetInteger(cvar_dlss_rr_available, vkpt_dlss_rr_is_available() ? 1 : 0, FROM_CODE);
 
+    if (cvar_deepdvc_available)
+        Cvar_SetInteger(cvar_deepdvc_available, vkpt_deepdvc_is_available() ? 1 : 0, FROM_CODE);
+
     if (cvar_dlss_mfg_max_count_for_device)
         Cvar_SetInteger(cvar_dlss_mfg_max_count_for_device, get_effective_mfg_cap(), FROM_CODE);
     if (cvar_dlss_mfg_cap_compat)
         Cvar_SetInteger(cvar_dlss_mfg_cap_compat, get_effective_mfg_cap(), FROM_CODE);
+
+    if (cvar_dlss_mfg_dynamic_supported)
+        Cvar_SetInteger(cvar_dlss_mfg_dynamic_supported, vkpt_dlss_get_mfg_dynamic_supported(), FROM_CODE);
+    if (cvar_dlss_mfg_policy_effective)
+        Cvar_SetInteger(cvar_dlss_mfg_policy_effective, (int)vkpt_dlss_get_effective_mfg_policy(), FROM_CODE);
 
     if (cvar_dlss_reflex_effective)
         Cvar_SetInteger(cvar_dlss_reflex_effective, vkpt_dlss_get_effective_reflex_mode(), FROM_CODE);
@@ -376,7 +474,9 @@ static void sync_status_cvars(void)
 static void enforce_mfg_and_reflex_policy(void)
 {
     if (!cvar_dlss_enable || !cvar_dlss_rr || !cvar_dlss_mfg || !cvar_dlss_reflex || !cvar_dlss_sharpness ||
-        !cvar_dlss_auto_exposure || !cvar_dlss_mfg_fps_cap || !cvar_dlss_custom_ratio)
+        !cvar_dlss_auto_exposure || !cvar_dlss_mfg_fps_cap || !cvar_dlss_custom_ratio ||
+        !cvar_dlss_mfg_policy || !cvar_dlss_mfg_dynamic_max || !cvar_dlss_mfg_dynamic_target_fps ||
+        !cvar_dlss_mfg_queue_parallelism || !cvar_dlss_reflex_fps_cap)
         return;
 
     if (cvar_dlss_rr->integer != clamp_bool_cvar_value(cvar_dlss_rr->integer))
@@ -391,12 +491,49 @@ static void enforce_mfg_and_reflex_policy(void)
     if (cvar_dlss_custom_ratio->integer != clamp_dlss_custom_ratio_percent(cvar_dlss_custom_ratio->integer))
         Cvar_SetInteger(cvar_dlss_custom_ratio, clamp_dlss_custom_ratio_percent(cvar_dlss_custom_ratio->integer), FROM_CODE);
 
+    if (cvar_deepdvc_enable &&
+        cvar_deepdvc_enable->integer != clamp_bool_cvar_value(cvar_deepdvc_enable->integer))
+        Cvar_SetInteger(cvar_deepdvc_enable,
+            clamp_bool_cvar_value(cvar_deepdvc_enable->integer), FROM_CODE);
+
+    if (cvar_deepdvc_intensity &&
+        cvar_deepdvc_intensity->value != clamp_unit_float(cvar_deepdvc_intensity->value))
+        Cvar_SetValue(cvar_deepdvc_intensity,
+            clamp_unit_float(cvar_deepdvc_intensity->value), FROM_CODE);
+
+    if (cvar_deepdvc_saturation_boost &&
+        cvar_deepdvc_saturation_boost->value != clamp_unit_float(cvar_deepdvc_saturation_boost->value))
+        Cvar_SetValue(cvar_deepdvc_saturation_boost,
+            clamp_unit_float(cvar_deepdvc_saturation_boost->value), FROM_CODE);
+
     if (cvar_dlss_mfg_fps_cap->integer < 0)
         Cvar_SetInteger(cvar_dlss_mfg_fps_cap, 0, FROM_CODE);
+
+    if (cvar_dlss_mfg_queue_parallelism->integer != clamp_bool_cvar_value(cvar_dlss_mfg_queue_parallelism->integer))
+        Cvar_SetInteger(cvar_dlss_mfg_queue_parallelism,
+            clamp_bool_cvar_value(cvar_dlss_mfg_queue_parallelism->integer), FROM_CODE);
+
+    if (cvar_dlss_mfg->integer != clamp_mfg_mode_raw(cvar_dlss_mfg->integer))
+        Cvar_SetInteger(cvar_dlss_mfg, clamp_mfg_mode_raw(cvar_dlss_mfg->integer), FROM_CODE);
+
+    if (cvar_dlss_mfg_policy->integer != clamp_mfg_policy(cvar_dlss_mfg_policy->integer))
+        Cvar_SetInteger(cvar_dlss_mfg_policy, clamp_mfg_policy(cvar_dlss_mfg_policy->integer), FROM_CODE);
+
+    if (cvar_dlss_mfg_dynamic_max->integer != clamp_mfg_dynamic_max_raw(cvar_dlss_mfg_dynamic_max->integer))
+        Cvar_SetInteger(cvar_dlss_mfg_dynamic_max,
+            clamp_mfg_dynamic_max_raw(cvar_dlss_mfg_dynamic_max->integer), FROM_CODE);
+
+    if (cvar_dlss_mfg_dynamic_target_fps->value != clamp_mfg_dynamic_target_fps(cvar_dlss_mfg_dynamic_target_fps->value))
+        Cvar_SetValue(cvar_dlss_mfg_dynamic_target_fps,
+            clamp_mfg_dynamic_target_fps(cvar_dlss_mfg_dynamic_target_fps->value), FROM_CODE);
 
     if (cvar_dlss_reflex->integer != clamp_reflex_mode(cvar_dlss_reflex->integer)) {
         Cvar_SetInteger(cvar_dlss_reflex, clamp_reflex_mode(cvar_dlss_reflex->integer), FROM_CODE);
     }
+
+    if (cvar_dlss_reflex_fps_cap->integer != clamp_reflex_fps_cap(cvar_dlss_reflex_fps_cap->integer))
+        Cvar_SetInteger(cvar_dlss_reflex_fps_cap,
+            clamp_reflex_fps_cap(cvar_dlss_reflex_fps_cap->integer), FROM_CODE);
 
     if (cvar_dlss_rr_preset) {
         int rr_preset = cvar_dlss_rr_preset->integer;
@@ -434,6 +571,43 @@ bool vkpt_dlss_rr_is_enabled(void)
     if (!vkpt_dlss_is_enabled()) return false;
     if (!cvar_dlss_rr) return false;
     return cvar_dlss_rr->integer != 0;
+}
+
+bool vkpt_deepdvc_is_available(void)
+{
+    return s_vk_info_set && g_dlss_sl_deepdvc_available;
+}
+
+bool vkpt_deepdvc_is_enabled(void)
+{
+    if (!vkpt_deepdvc_is_available())
+        return false;
+    if (!cvar_deepdvc_enable || cvar_deepdvc_enable->integer == 0)
+        return false;
+    if (qvk.surf_is_hdr)
+        return false;
+    if (cvar_tm_enable && cvar_tm_enable->integer == 0)
+        return false;
+    return true;
+}
+
+float vkpt_deepdvc_get_intensity(void)
+{
+    if (!cvar_deepdvc_intensity)
+        return 0.5f;
+    return clamp_unit_float(cvar_deepdvc_intensity->value);
+}
+
+float vkpt_deepdvc_get_saturation_boost(void)
+{
+    if (!cvar_deepdvc_saturation_boost)
+        return 0.25f;
+    return clamp_unit_float(cvar_deepdvc_saturation_boost->value);
+}
+
+uint64_t vkpt_deepdvc_get_estimated_vram(void)
+{
+    return dlss_sl_deepdvc_get_estimated_vram();
 }
 
 bool vkpt_dlss_needs_upscale(void)
@@ -485,6 +659,39 @@ DlssMfgMode_t vkpt_dlss_get_mfg_mode(void)
     return (DlssMfgMode_t)v;
 }
 
+DlssMfgPolicy_t vkpt_dlss_get_mfg_policy(void)
+{
+    if (!cvar_dlss_mfg_policy)
+        return DLSS_MFG_POLICY_FIXED;
+    return (DlssMfgPolicy_t)clamp_mfg_policy(cvar_dlss_mfg_policy->integer);
+}
+
+DlssMfgPolicy_t vkpt_dlss_get_effective_mfg_policy(void)
+{
+    int policy = dlss_sl_get_effective_mfg_policy();
+    if (policy < DLSS_MFG_POLICY_FIXED || policy >= DLSS_MFG_POLICY_COUNT)
+        return vkpt_dlss_get_mfg_policy();
+    return (DlssMfgPolicy_t)policy;
+}
+
+DlssMfgMode_t vkpt_dlss_get_mfg_dynamic_max(void)
+{
+    int cap = get_effective_mfg_cap();
+    int requested = get_user_requested_mfg_dynamic_max();
+
+    if (requested == 0)
+        return (DlssMfgMode_t)clamp_mfg_mode_to_cap(cap, cap);
+
+    return (DlssMfgMode_t)clamp_mfg_mode_to_cap(requested, cap);
+}
+
+float vkpt_dlss_get_mfg_dynamic_target_fps(void)
+{
+    if (!cvar_dlss_mfg_dynamic_target_fps)
+        return 0.0f;
+    return clamp_mfg_dynamic_target_fps(cvar_dlss_mfg_dynamic_target_fps->value);
+}
+
 int vkpt_dlss_get_mfg_render_cap(void)
 {
     if (!cvar_dlss_mfg_fps_cap)
@@ -492,6 +699,20 @@ int vkpt_dlss_get_mfg_render_cap(void)
     if (cvar_dlss_mfg_fps_cap->integer <= 0)
         return 0;
     return cvar_dlss_mfg_fps_cap->integer;
+}
+
+int vkpt_dlss_get_mfg_queue_parallelism(void)
+{
+    if (!cvar_dlss_mfg_queue_parallelism)
+        return 0;
+    return clamp_bool_cvar_value(cvar_dlss_mfg_queue_parallelism->integer);
+}
+
+int vkpt_dlss_get_reflex_fps_cap(void)
+{
+    if (!cvar_dlss_reflex_fps_cap)
+        return 0;
+    return clamp_reflex_fps_cap(cvar_dlss_reflex_fps_cap->integer);
 }
 
 const char* vkpt_dlss_get_sr_dll_version(void)
@@ -507,6 +728,11 @@ const char* vkpt_dlss_get_rr_dll_version(void)
 const char* vkpt_dlss_get_fg_dll_version(void)
 {
     return dlss_sl_get_fg_dll_version();
+}
+
+const char* vkpt_deepdvc_get_dll_version(void)
+{
+    return dlss_sl_get_dvc_dll_version();
 }
 
 bool vkpt_dlss_is_sl_debug_log_enabled(void)
@@ -525,10 +751,15 @@ int vkpt_dlss_get_display_multiplier(void)
     if (multiplier > 0)
         return multiplier;
 
+    if (vkpt_dlss_get_mfg_policy() == DLSS_MFG_POLICY_DYNAMIC)
+        return 1;
+
     switch (vkpt_dlss_get_mfg_mode()) {
     case DLSS_MFG_2X: return 2;
     case DLSS_MFG_3X: return 3;
     case DLSS_MFG_4X: return 4;
+    case DLSS_MFG_5X: return 5;
+    case DLSS_MFG_6X: return 6;
     default:          return 1;
     }
 }
@@ -541,6 +772,11 @@ uint64_t vkpt_dlss_get_total_presented_frames(void)
 int vkpt_dlss_get_mfg_cap(void)
 {
     return get_effective_mfg_cap();
+}
+
+int vkpt_dlss_get_mfg_dynamic_supported(void)
+{
+    return dlss_sl_get_mfg_dynamic_supported();
 }
 
 int vkpt_dlss_get_requested_reflex_mode(void)
@@ -718,6 +954,7 @@ void vkpt_dlss_init(void)
     Com_Printf("[DLSS] slIsFeatureSupported DLSS SR result: %d\n", g_dlss_sl_sr_result);
     Com_Printf("[DLSS] slIsFeatureSupported DLSS RR result: %d\n", g_dlss_sl_rr_result);
     Com_Printf("[DLSS] slIsFeatureSupported DLSS-G result:  %d\n", g_dlss_sl_g_result);
+    Com_Printf("[DeepDVC] slIsFeatureSupported result: %d\n", g_dlss_sl_deepdvc_result);
 
     if (!g_dlss_sl_available)
     {
@@ -725,9 +962,10 @@ void vkpt_dlss_init(void)
         return;
     }
 
-    Com_Printf("[DLSS] DLSS SR available%s%s\n",
+    Com_Printf("[DLSS] DLSS SR available%s%s%s\n",
                g_dlss_sl_rr_available ? " | DLSS-RR available" : "",
-               g_dlss_sl_g_available ? " | DLSS-G/MFG available" : "");
+               g_dlss_sl_g_available ? " | DLSS-G/MFG available" : "",
+               g_dlss_sl_deepdvc_available ? " | DeepDVC available" : "");
 }
 
 static VkResult dlss_alloc_output_image(void)
@@ -1027,6 +1265,7 @@ VkResult vkpt_dlss_destroy(void)
     s_sl_started     = false;
     s_vk_info_set    = false;
     s_reflex_applied = false;
+    s_deepdvc_applied = false;
     s_detected_mfg_cap = 0;
     sync_status_cvars();
     return VK_SUCCESS;
@@ -1078,7 +1317,7 @@ VkResult vkpt_dlss_destroy_output_image(void)
 void vkpt_dlss_reflex_apply_options(void)
 {
     int mode = get_desired_reflex_mode();
-    dlss_sl_reflex_set_options(mode);
+    dlss_sl_reflex_set_options(mode, vkpt_dlss_get_reflex_fps_cap());
     sync_status_cvars();
 }
 
@@ -1285,10 +1524,15 @@ typedef struct DlssFrameContext_s {
 
 static void dlss_apply_reflex_if_needed(void)
 {
-    if (cvar_dlss_reflex && (cvar_dlss_reflex->changed || !s_reflex_applied))
+    if ((cvar_dlss_reflex && cvar_dlss_reflex->changed) ||
+        (cvar_dlss_reflex_fps_cap && cvar_dlss_reflex_fps_cap->changed) ||
+        !s_reflex_applied)
     {
         vkpt_dlss_reflex_apply_options();
-        cvar_dlss_reflex->changed = false;
+        if (cvar_dlss_reflex)
+            cvar_dlss_reflex->changed = false;
+        if (cvar_dlss_reflex_fps_cap)
+            cvar_dlss_reflex_fps_cap->changed = false;
         s_reflex_applied = true;
     }
 }
@@ -1376,10 +1620,29 @@ static void dlss_tag_mfg_common(VkCommandBuffer cmd_buf,
     if (!g_dlss_sl_g_available || !cvar_dlss_mfg)
         return;
 
+    if (qvk.frame_menu_mode) {
+        vkpt_dlss_force_mfg_off_for_menu();
+        return;
+    }
+
     int mfg_mode = (int)vkpt_dlss_get_mfg_mode();
+    int mfg_options_mode = mfg_mode;
+    int mfg_policy = (int)vkpt_dlss_get_mfg_policy();
+
+    /* Dynamic/Variable MFG is driven by Streamline's target frame-rate logic.
+     * The fixed multiplier cvar remains the on/off switch. The separate dynamic
+     * max cvar provides the ceiling for Vulkan's Auto fallback and for runtimes
+     * that treat numFramesToGenerate as a dynamic upper bound. */
+    if (mfg_mode != DLSS_MFG_OFF && mfg_policy == DLSS_MFG_POLICY_DYNAMIC) {
+        int dynamic_max = (int)vkpt_dlss_get_mfg_dynamic_max();
+        if (dynamic_max >= DLSS_MFG_2X)
+            mfg_options_mode = dynamic_max;
+    }
 
     dlss_sl_set_g_options(
-        mfg_mode,
+        mfg_options_mode,
+        mfg_policy,
+        vkpt_dlss_get_mfg_dynamic_target_fps(),
         display_w, display_h,
         qvk.extent_render.width, qvk.extent_render.height,
         (uint32_t)qvk.num_swap_chain_images,
@@ -1388,7 +1651,8 @@ static void dlss_tag_mfg_common(VkCommandBuffer cmd_buf,
         (uint32_t)VK_FORMAT_R16_SFLOAT,
         fmt_hudless,
         (uint32_t)qvk.surf_format.format,
-        0);
+        0,
+        (mfg_mode != DLSS_MFG_OFF) ? vkpt_dlss_get_mfg_queue_parallelism() : 0);
 
     if (mfg_mode == DLSS_MFG_OFF)
         return;
@@ -1448,6 +1712,8 @@ void vkpt_dlss_force_mfg_off_for_menu(void)
 
     dlss_sl_set_g_options(
         DLSS_MFG_OFF,
+        DLSS_MFG_POLICY_FIXED,
+        0.0f,
         qvk.extent_unscaled.width,
         qvk.extent_unscaled.height,
         qvk.extent_render.width,
@@ -1458,12 +1724,61 @@ void vkpt_dlss_force_mfg_off_for_menu(void)
         (uint32_t)VK_FORMAT_R16_SFLOAT,
         (uint32_t)VK_FORMAT_R16G16B16A16_SFLOAT,
         0,
+        0,
         0);
+}
+
+void vkpt_deepdvc_apply(VkCommandBuffer cmd_buf,
+    VkImage color_img, VkImageView color_view,
+    uint32_t layout_color, uint32_t fmt_color,
+    uint32_t resource_w, uint32_t resource_h,
+    uint32_t valid_w, uint32_t valid_h)
+{
+    bool can_apply = vkpt_deepdvc_is_enabled() &&
+        color_img != VK_NULL_HANDLE &&
+        color_view != VK_NULL_HANDLE &&
+        resource_w >= valid_w &&
+        resource_h >= valid_h &&
+        valid_w == qvk.extent_unscaled.width &&
+        valid_h == qvk.extent_unscaled.height;
+
+    if (!can_apply) {
+        if (s_deepdvc_applied) {
+            dlss_sl_deepdvc_set_options(0, 0.0f, 0.0f);
+            s_deepdvc_applied = false;
+        }
+        return;
+    }
+
+    dlss_sl_deepdvc_set_options(1,
+        vkpt_deepdvc_get_intensity(),
+        vkpt_deepdvc_get_saturation_boost());
+
+    dlss_sl_deepdvc_tag_resource(cmd_buf,
+        color_img,
+        color_view,
+        layout_color,
+        fmt_color,
+        resource_w, resource_h,
+        valid_w, valid_h);
+
+    dlss_sl_deepdvc_evaluate(cmd_buf);
+    s_deepdvc_applied = true;
+
+    IMAGE_BARRIER(cmd_buf,
+        .image            = color_img,
+        .oldLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
+        .srcAccessMask    = VK_ACCESS_SHADER_WRITE_BIT,
+        .dstAccessMask    = VK_ACCESS_SHADER_READ_BIT,
+        .subresourceRange = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                              .levelCount = 1, .layerCount = 1 });
 }
 
 void vkpt_dlss_process(VkCommandBuffer cmd_buf)
 {
-    if (!vkpt_dlss_is_enabled() || vkpt_dlss_rr_is_enabled()) return;
+    if (!vkpt_dlss_is_enabled()) return;
+    if (vkpt_dlss_rr_is_enabled() && !qvk.frame_menu_mode) return;
 
     enforce_mfg_and_reflex_policy();
     DlssFrameContext_t ctx;
@@ -1528,6 +1843,14 @@ void vkpt_dlss_process(VkCommandBuffer cmd_buf)
         .dstAccessMask    = VK_ACCESS_SHADER_READ_BIT,
         .subresourceRange = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                               .levelCount = 1, .layerCount = 1 });
+
+    vkpt_deepdvc_apply(cmd_buf,
+        s_dlss_out_img,
+        s_dlss_out_view,
+        VK_IMAGE_LAYOUT_GENERAL,
+        VK_FORMAT_R16G16B16A16_SFLOAT,
+        qvk.extent_unscaled.width, qvk.extent_unscaled.height,
+        qvk.extent_unscaled.width, qvk.extent_unscaled.height);
 
     dlss_tag_mfg_common(cmd_buf,
         ctx.depth_idx,

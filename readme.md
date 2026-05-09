@@ -2,7 +2,9 @@
 
 [![Build Status](https://github.com/Quake-Journey/Q2RTX_DLSS/actions/workflows/build.yml/badge.svg)](https://github.com/Quake-Journey/Q2RTX_DLSS/actions/workflows/build.yml)
 
-Public Beta 0.8
+Public Beta 0.9
+
+Streamline 2.11.1 / DLSS 4.5
 
 Based on Q2RTX 1.8.1
 
@@ -12,7 +14,7 @@ It is a self-contained Quake II RTX source tree focused on integrating modern NV
 
 ## Purpose
 
-This public beta branch is intended for testing the integration of NVIDIA DLSS Super Resolution, DLSS Ray Reconstruction, DLSS Multi Frame Generation, and NVIDIA Reflex in Q2RTX.
+This public beta branch is intended for testing the integration of NVIDIA Streamline 2.11.1, DLSS Super Resolution, DLSS Ray Reconstruction, DLSS Multi Frame Generation, NVIDIA Reflex, and RTX Dynamic Vibrance / DeepDVC in Q2RTX.
 
 It targets owners of compatible NVIDIA RTX GPUs and is meant for:
 
@@ -28,10 +30,17 @@ This fork currently exposes and tests the following user-facing additions:
 - NVIDIA DLSS Super Resolution
 - DLAA
 - DLSS Ray Reconstruction
-- DLSS Multi Frame Generation 2X / 3X / 4X
+- DLSS Multi Frame Generation 2X / 3X / 4X / 5X / 6X
+- Fixed / Auto / Dynamic-Variable MFG policy controls
+- Separate Variable MFG max limit and target FPS controls
 - NVIDIA Reflex
+- NVIDIA Reflex FPS cap
+- RTX Dynamic Vibrance / DeepDVC
 - DLSS custom scale controls
-- DLSS debug overlay with presets, DLL versions, and active runtime parameters
+- dedicated `Video -> NVIDIA DLSS` submenu with live parameter application
+- DLSS debug overlay with presets, DLL versions, active runtime parameters, MFG state, Reflex state, and DeepDVC state
+- menu opacity control for in-game DLSS tuning
+- convenient `r_maxfps` menu entry for DLSS/MFG/Reflex testing
 - fork-specific DLSS / RR tuning baselines
 
 ## Current Status
@@ -40,16 +49,19 @@ Current project notes in this source tree indicate the following working status 
 
 - `DLSS SR` works
 - `DLSS-G / MFG` works
+- `Variable/Dynamic MFG` works with a separate max multiplier limit
 - `RR` is usable and stable enough for testing, though some reflection-heavy scenes may still show artifacts
+- `DeepDVC / RTX Dynamic Vibrance` works in the intended SDR path
+- DLSS menu parameters are applied live on a loaded map
 - `HDR + MFG` should currently be treated as unsupported for serious testing
 
 ## Main Limitations
 
-- MFG already works, but render FPS can still drop significantly in aggressive DLSS SR modes, especially Ultra Performance.
 - For MFG, HDR should currently be considered unsupported for serious testing and is best kept off.
 - RR is stable enough to use, but some mirror, glass, and complex reflection scenes may still show residual artifacts.
 - Formal Ultra Quality is hidden from the menu; use Custom scale instead.
-- MFG availability depends on GPU and driver. Intended usage in this beta: `2X` mainly for RTX 40/50, `3X` and `4X` mainly for RTX 50.
+- MFG availability depends on GPU, driver, and NVIDIA runtime. Intended usage in this beta: `2X` mainly for RTX 40/50, `3X` / `4X` / `5X` / `6X` mainly for RTX 50 where supported.
+- Dynamic Native is not exposed because this fork uses Vulkan, while that Streamline feature is not available in the current Vulkan path.
 
 ## Important Notes
 
@@ -60,6 +72,7 @@ Current project notes in this source tree indicate the following working status 
 Useful local documents in this repo:
 
 - [Public beta overview (EN)](project-notes/README_PUBLIC_BETA_EN.txt)
+- [Streamline 2.11.1 status](project-notes/STREAMLINE_2_11_1_STATUS.md)
 - [Build from scratch notes](project-notes/BUILD_FROM_SCRATCH.md)
 - [Source package notes](README_PACKAGE.md)
 

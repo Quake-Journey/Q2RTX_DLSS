@@ -259,6 +259,11 @@ Default value is 0 (bobbing enabled).
 Specifies opacity level of the player's own gun model. Default value is 1
 (fully opaque).
 
+#### `cl_menu_alpha`
+Specifies opacity multiplier for menu background surfaces. 0 makes menu
+backgrounds fully transparent, 1 keeps the original menu background opacity.
+Text and selectable controls are not faded. Default value is 1.
+
 #### `cl_gunscale`
 Specifies the scale for the gun model. It should be set to something less
 than 1.0 so that the gun wouldn't intersect with walls and other objects

@@ -177,6 +177,24 @@ void updateEmbeddedJSON(json& config)
         info.needsNGX = true;
         info.requiredTags = { {kBufferTypeScalingOutputColor, ResourceLifecycle::eValidUntilEvaluate} };
         updateCommonEmbeddedJSONConfig(&config, info);
+
+        std::string slVersion = extra::format("{}.{}.{}", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
+        config["external"]["version"]["sl"] = slVersion;
+
+        // Extract NGX info
+        common::PFunGetStringFromModule* func{};
+        param::getPointerParam(api::getContext()->parameters, sl::param::common::kPFunGetStringFromModule, &func);
+        if (func)
+        {
+            std::string ngxVersion;
+            func("nvngx_deepdvc.dll", "FileVersion", ngxVersion);
+            std::replace(ngxVersion.begin(), ngxVersion.end(), ',', '.');
+            config["external"]["version"]["ngx"] = ngxVersion;
+        }
+        else
+        {
+            SL_LOG_WARN("DeepDVC - Failed to acquire GetStringFromModule function.");
+        }
     }
     // TODO: Check DeepDVC min driver version
 }

@@ -6,7 +6,7 @@ Streamline - NIS
 >The focus of this guide is on using Streamline to integrate the NVIDIA Image Scaling (NIS) SDK into an application.  For more information about NIS itself, please visit the [NVIDIA Image Scaling SDK Github Page](https://github.com/NVIDIAGameWorks/NVIDIAImageScaling)  
 >For information on user interface considerations when using the NIS plugin, please see the ["RTX UI Developer Guidelines.pdf"](<RTX UI Developer Guidelines.pdf>) document included with this SDK.
 
-Version 2.8.0
+Version 2.11.1
 =======
 
 ### Introduction
@@ -142,6 +142,9 @@ slSetTagForFrame(*currentFrame, viewport, inputs, _countof(inputs), cmdList);
 ```
 > **IMPORTANT**
 > When using Vulkan additional information about the resource must be provided (width, height, format, image view etc). See `sl::Resource` for details.
+
+> **IMPORTANT**
+> If previously tagged resources are destroyed (whether they are volatile or not), `slFreeResources` must be called unless NIS is no longer used.
 
 ### 4.0 PROVIDE NIS OPTIONS
 

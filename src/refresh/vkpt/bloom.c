@@ -53,6 +53,15 @@ cvar_t *cvar_bloom_intensity_water = NULL;
 static float bloom_intensity;
 static float bloom_sigma;
 static float under_water_animation;
+static cvar_t *cvar_cl_menu_alpha;
+
+bool vkpt_bloom_menu_effect_enabled(void)
+{
+	if (!cvar_cl_menu_alpha)
+		cvar_cl_menu_alpha = Cvar_Get("cl_menu_alpha", "1.0", CVAR_ARCHIVE);
+
+	return cvar_cl_menu_alpha->value >= 0.999f;
+}
 
 static void compute_push_constants(void)
 {
@@ -103,7 +112,7 @@ void vkpt_bloom_update(QVKUniformBuffer_t * ubo, float frame_time, bool under_wa
 
 	static uint32_t menu_start_ms = 0;
 
-	if (menu_mode)
+	if (menu_mode && vkpt_bloom_menu_effect_enabled())
 	{
 		if (menu_start_ms == 0)
 			menu_start_ms = Sys_Milliseconds();

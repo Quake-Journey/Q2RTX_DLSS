@@ -163,7 +163,7 @@ enum QVK_SHADER_MODULES {
  * Q2RTX historically used double-buffered per-frame resources. With DLSS-G/MFG
  * enabled Streamline runs the present path asynchronously and internally keeps
  * a deeper presentation pipeline. Four host frame slots were enough to restore
- * stability, but current MFG 3X/4X measurements still show a cadence pattern
+ * stability, but high-multiplier MFG measurements still show a cadence pattern
  * that strongly suggests early per-frame resource/fence reuse under high host
  * throughput. Give the host more headroom so FG can drain prior frames without
  * forcing the renderer to fall back to roughly display_fps / multiplier.
@@ -741,6 +741,7 @@ VkResult vkpt_bloom_create_pipelines(void);
 VkResult vkpt_bloom_destroy_pipelines(void);
 void vkpt_bloom_reset(void);
 void vkpt_bloom_update(QVKUniformBuffer_t * ubo, float frame_time, bool under_water, bool menu_mode);
+bool vkpt_bloom_menu_effect_enabled(void);
 VkResult vkpt_bloom_record_cmd_buffer(VkCommandBuffer cmd_buf);
 
 VkResult vkpt_tone_mapping_initialize(void);

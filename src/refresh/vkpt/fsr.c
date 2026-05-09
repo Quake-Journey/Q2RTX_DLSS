@@ -19,6 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 */
 
 #include "vkpt.h"
+#include "dlss.h"
 
 /*
 	FidelityFX Super Resolution 1.0 ("FSR") implementation overview
@@ -317,5 +318,12 @@ VkResult vkpt_fsr_do(VkCommandBuffer cmd_buf)
 VkResult vkpt_fsr_final_blit(VkCommandBuffer cmd_buf, bool warp)
 {
 	int output_image = cvar_flt_fsr_rcas->integer != 0 ? VKPT_IMG_FSR_RCAS_OUTPUT : VKPT_IMG_FSR_EASU_OUTPUT;
+	vkpt_deepdvc_apply(cmd_buf,
+		qvk.images[output_image],
+		qvk.images_views[output_image],
+		VK_IMAGE_LAYOUT_GENERAL,
+		VK_FORMAT_R16G16B16A16_SFLOAT,
+		qvk.extent_screen_images.width, qvk.extent_screen_images.height,
+		qvk.extent_unscaled.width, qvk.extent_unscaled.height);
 	return vkpt_final_blit(cmd_buf, output_image, qvk.extent_unscaled, false, warp);
 }

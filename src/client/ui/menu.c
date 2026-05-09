@@ -20,6 +20,88 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "ui.h"
 #include "server/server.h"
 
+// Runtime menu background opacity. Text and selectable items stay readable.
+static cvar_t *cl_menu_alpha;
+
+static void Menu_ApplyLiveValue(void *item);
+
+static float UI_MenuAlpha(void)
+{
+    if (!cl_menu_alpha) {
+        cl_menu_alpha = Cvar_Get("cl_menu_alpha", "1.0", CVAR_ARCHIVE);
+    }
+
+    return Q_clipf(cl_menu_alpha->value, 0.0f, 1.0f);
+}
+
+static void UI_DrawMenuFill32(int x, int y, int w, int h, uint32_t color)
+{
+    float a = UI_MenuAlpha();
+
+    if (a <= 0.0f) {
+        return;
+    }
+
+    if (a < 1.0f) {
+        byte orig_a = (color >> 24) & 0xff;
+        byte new_a = (byte)(orig_a * a);
+        color = (color & 0x00ffffff) | ((uint32_t)new_a << 24);
+    }
+
+    R_DrawFill32(x, y, w, h, color);
+}
+
+static void UI_DrawMenuPic(int x, int y, qhandle_t pic)
+{
+    float a = UI_MenuAlpha();
+
+    if (a <= 0.0f) {
+        return;
+    }
+
+    if (a < 1.0f) {
+        R_SetAlpha(a);
+        R_DrawPic(x, y, pic);
+        R_SetAlpha(1.0f);
+    } else {
+        R_DrawPic(x, y, pic);
+    }
+}
+
+static void UI_DrawMenuKeepAspectPic(int x, int y, int w, int h, qhandle_t pic)
+{
+    float a = UI_MenuAlpha();
+
+    if (a <= 0.0f) {
+        return;
+    }
+
+    if (a < 1.0f) {
+        R_SetAlpha(a);
+        R_DrawKeepAspectPic(x, y, w, h, pic);
+        R_SetAlpha(1.0f);
+    } else {
+        R_DrawKeepAspectPic(x, y, w, h, pic);
+    }
+}
+
+static void UI_DrawMenuStretchPic(int x, int y, int w, int h, qhandle_t pic)
+{
+    float a = UI_MenuAlpha();
+
+    if (a <= 0.0f) {
+        return;
+    }
+
+    if (a < 1.0f) {
+        R_SetAlpha(a);
+        R_DrawStretchPic(x, y, w, h, pic);
+        R_SetAlpha(1.0f);
+    } else {
+        R_DrawStretchPic(x, y, w, h, pic);
+    }
+}
+
 /*
 ===================================================================
 
@@ -583,6 +665,8 @@ static int SpinControl_DoEnter(menuSpinControl_t *s)
         s->generic.change(&s->generic);
     }
 
+    Menu_ApplyLiveValue(s);
+
     return QMS_MOVE;
 }
 
@@ -607,6 +691,8 @@ static int SpinControl_DoSlide(menuSpinControl_t *s, int dir)
     if (s->generic.change) {
         s->generic.change(&s->generic);
     }
+
+    Menu_ApplyLiveValue(s);
 
     return QMS_MOVE;
 }
@@ -771,6 +857,7 @@ static void Toggle_Pop(menuSpinControl_t *s)
 }
 
 static void Slider_Push(menuSlider_t *s);
+static void Slider_Pop(menuSlider_t *s);
 static void BitField_Push(menuSpinControl_t *s);
 static void Pairs_Push(menuSpinControl_t *s);
 static void Strings_Push(menuSpinControl_t *s);
@@ -813,6 +900,45 @@ static void Menu_PushItemValue(void *item)
         break;
     default:
         break;
+    }
+}
+
+static void Menu_PopItemValue(void *item)
+{
+    switch (((menuCommon_t *)item)->type) {
+    case MTYPE_SLIDER:
+        Slider_Pop(item);
+        break;
+    case MTYPE_BITFIELD:
+        BitField_Pop(item);
+        break;
+    case MTYPE_PAIRS:
+        Pairs_Pop(item);
+        break;
+    case MTYPE_STRINGS:
+        Strings_Pop(item);
+        break;
+    case MTYPE_SPINCONTROL:
+        SpinControl_Pop(item);
+        break;
+    case MTYPE_TOGGLE:
+        Toggle_Pop(item);
+        break;
+    case MTYPE_KEYBIND:
+        Keybind_Pop(item);
+        break;
+    case MTYPE_FIELD:
+        Field_Pop(item);
+        break;
+    default:
+        break;
+    }
+}
+
+static void Menu_ApplyLiveValue(void *item)
+{
+    if (((menuCommon_t *)item)->flags & QMF_LIVE) {
+        Menu_PopItemValue(item);
     }
 }
 
@@ -1632,6 +1758,7 @@ static menuSound_t Slider_MouseMove(menuSlider_t *s)
 
     s->modified = true;
     s->curvalue = s->minvalue + steps * s->step;
+    Menu_ApplyLiveValue(s);
     return QMS_SILENT;
 }
 
@@ -1641,10 +1768,12 @@ static menuSound_t Slider_Key(menuSlider_t *s, int key)
     case K_END:
         s->modified = true;
         s->curvalue = s->maxvalue;
+        Menu_ApplyLiveValue(s);
         return QMS_MOVE;
     case K_HOME:
         s->modified = true;
         s->curvalue = s->minvalue;
+        Menu_ApplyLiveValue(s);
         return QMS_MOVE;
     case K_MOUSE1:
         return Slider_Click(s);
@@ -1661,14 +1790,19 @@ Slider_DoSlide
 */
 static menuSound_t Slider_DoSlide(menuSlider_t *s, int dir)
 {
+    menuSound_t sound = QMS_NOTHANDLED;
+
     s->modified = true;
     s->curvalue = Q_circ_clipf(s->curvalue + dir * s->step, s->minvalue, s->maxvalue);
 
     if (s->generic.change) {
-        menuSound_t sound = s->generic.change(&s->generic);
-        if (sound != QMS_NOTHANDLED) {
-            return sound;
-        }
+        sound = s->generic.change(&s->generic);
+    }
+
+    Menu_ApplyLiveValue(s);
+
+    if (sound != QMS_NOTHANDLED) {
+        return sound;
     }
 
     return QMS_SILENT;
@@ -2257,11 +2391,11 @@ void Menu_Draw(menuFrameWork_t *menu)
 // draw background
 //
     if (menu->image) {
-        R_DrawKeepAspectPic(0, menu->y1, uis.width,
-                            menu->y2 - menu->y1, menu->image);
+        UI_DrawMenuKeepAspectPic(0, menu->y1, uis.width,
+                                 menu->y2 - menu->y1, menu->image);
     } else {
-        R_DrawFill32(0, menu->y1, uis.width,
-                     menu->y2 - menu->y1, menu->color.u32);
+        UI_DrawMenuFill32(0, menu->y1, uis.width,
+                          menu->y2 - menu->y1, menu->color.u32);
     }
 
 //
@@ -2276,16 +2410,16 @@ void Menu_Draw(menuFrameWork_t *menu)
 // draw banner, plaque and logo
 //
     if (menu->banner) {
-        R_DrawPic(menu->banner_rc.x, menu->banner_rc.y, menu->banner);
+        UI_DrawMenuPic(menu->banner_rc.x, menu->banner_rc.y, menu->banner);
     }
     if (menu->plaque) {
-        R_DrawPic(menu->plaque_rc.x, menu->plaque_rc.y, menu->plaque);
+        UI_DrawMenuPic(menu->plaque_rc.x, menu->plaque_rc.y, menu->plaque);
     }
     if (menu->logo) {
-        R_DrawPic(menu->logo_rc.x, menu->logo_rc.y, menu->logo);
+        UI_DrawMenuPic(menu->logo_rc.x, menu->logo_rc.y, menu->logo);
 	}
 	if (menu->footer) {
-		R_DrawStretchPic(menu->footer_rc.x, menu->footer_rc.y, menu->footer_rc.width, menu->footer_rc.height, menu->footer);
+		UI_DrawMenuStretchPic(menu->footer_rc.x, menu->footer_rc.y, menu->footer_rc.width, menu->footer_rc.height, menu->footer);
 	}
 
 //
@@ -2574,35 +2708,7 @@ void Menu_Pop(menuFrameWork_t *menu)
 
     for (i = 0; i < menu->nitems; i++) {
         item = menu->items[i];
-
-        switch (((menuCommon_t *)item)->type) {
-        case MTYPE_SLIDER:
-            Slider_Pop(item);
-            break;
-        case MTYPE_BITFIELD:
-            BitField_Pop(item);
-            break;
-        case MTYPE_PAIRS:
-            Pairs_Pop(item);
-            break;
-        case MTYPE_STRINGS:
-            Strings_Pop(item);
-            break;
-        case MTYPE_SPINCONTROL:
-            SpinControl_Pop(item);
-            break;
-        case MTYPE_TOGGLE:
-            Toggle_Pop(item);
-            break;
-        case MTYPE_KEYBIND:
-            Keybind_Pop(item);
-            break;
-        case MTYPE_FIELD:
-            Field_Pop(item);
-            break;
-        default:
-            break;
-        }
+        Menu_PopItemValue(item);
     }
 }
 

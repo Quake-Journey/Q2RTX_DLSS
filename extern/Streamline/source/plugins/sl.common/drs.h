@@ -32,4 +32,6 @@ namespace drs
     bool drsReadKey(NvU32 keyId, NvU32& uValue);
     bool drsReadKeyFromProfile(NvU32 keyId, NvU32& uValue);
     bool drsReadKeyStringFromProfile(NvU32 keyId, std::wstring& sValue);
+    bool drsReadKeyFromProfileNoGlobal(NvU32 keyId, NvU32& uValue);
+    bool drsReadKeyStringFromProfileNoGlobal(NvU32 keyId, std::wstring& sValue);
 }

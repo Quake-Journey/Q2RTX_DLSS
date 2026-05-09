@@ -57,6 +57,7 @@ extern "C" {
 #include "sl_dlss_g.h"
 #include "sl_reflex.h"
 #include "sl_pcl.h"          /* PCLMarker, slPCLSetMarker — used to mark present boundaries for DLSS-G */
+#include "sl_deepdvc.h"
 #include "sl_helpers_vk.h"   /* sl::VulkanInfo, PFun_slSetVulkanInfo, slSetVulkanInfo decl */
 
 #include <stdio.h>
@@ -105,6 +106,8 @@ static PFun_slDLSSGGetState*    pfn_slDLSSGGetState    = nullptr;
  * slPCLSetMarker(ePresentStart/End, frame) is required by DLSS-G to match present → frame token.
  * Without these markers, DLSS-G cannot find common constants → "missing common constants" every frame. */
 static PFun_slPCLSetMarker*     pfn_slPCLSetMarker     = nullptr;
+static PFun_slDeepDVCSetOptions* pfn_slDeepDVCSetOptions = nullptr;
+static PFun_slDeepDVCGetState*   pfn_slDeepDVCGetState   = nullptr;
 using PFun_slHookVkCmdBindPipeline = void(VkCommandBuffer, VkPipelineBindPoint, VkPipeline);
 using PFun_slHookVkCmdBindDescriptorSets = void(VkCommandBuffer, VkPipelineBindPoint, VkPipelineLayout, uint32_t, uint32_t, const VkDescriptorSet*, uint32_t, const uint32_t*);
 using PFun_slHookVkBeginCommandBuffer = void(VkCommandBuffer, const VkCommandBufferBeginInfo*);
@@ -195,6 +198,7 @@ extern "C" {
 
 static void transpose4x4(const float *src, sl::float4x4 &dst);
 static sl::DLSSPreset map_preset(int p);
+static sl::DLSSPreset map_preset_for_mode(int mode, int p);
 static sl::DLSSDPreset map_rr_preset(int p);
 
 sl::Result slInit(const sl::Preferences& p, uint64_t v)
@@ -341,6 +345,8 @@ static void sl_log_callback(sl::LogType type, const char* msg)
 static int s_display_fps = 0;
 static int s_display_multiplier = 0;
 static int s_mfg_cap = 0;
+static int s_mfg_dynamic_supported = 0;
+static int s_effective_mfg_policy = DLSS_MFG_POLICY_FIXED;
 static int s_effective_reflex_mode = -1;
 static int s_last_dlssg_status = 0;
 static int s_last_dlssg_frames_presented = 0;
@@ -350,10 +356,12 @@ static uint64_t s_presented_frames_total = 0;
 static VkSemaphore s_dlssg_inputs_fence = VK_NULL_HANDLE;
 static uint64_t s_dlssg_inputs_fence_value = 0;
 static uint64_t s_dlssg_inputs_fence_waited_value = 0;
+static uint64_t s_deepdvc_estimated_vram = 0;
 static auto s_display_fps_window_start = std::chrono::steady_clock::now();
 static char s_sr_dll_version[64] = "n/a";
 static char s_rr_dll_version[64] = "n/a";
 static char s_fg_dll_version[64] = "n/a";
+static char s_dvc_dll_version[64] = "n/a";
 
 #ifdef _WIN32
 static void query_module_file_version(HMODULE module, char *out, size_t out_size)
@@ -414,10 +422,12 @@ static void refresh_runtime_feature_versions(void)
     query_module_file_version(GetModuleHandleW(L"nvngx_dlss.dll"), s_sr_dll_version, sizeof(s_sr_dll_version));
     query_module_file_version(GetModuleHandleW(L"nvngx_dlssd.dll"), s_rr_dll_version, sizeof(s_rr_dll_version));
     query_module_file_version(GetModuleHandleW(L"nvngx_dlssg.dll"), s_fg_dll_version, sizeof(s_fg_dll_version));
+    query_module_file_version(GetModuleHandleW(L"nvngx_deepdvc.dll"), s_dvc_dll_version, sizeof(s_dvc_dll_version));
 #else
     query_module_file_version(nullptr, s_sr_dll_version, sizeof(s_sr_dll_version));
     query_module_file_version(nullptr, s_rr_dll_version, sizeof(s_rr_dll_version));
     query_module_file_version(nullptr, s_fg_dll_version, sizeof(s_fg_dll_version));
+    query_module_file_version(nullptr, s_dvc_dll_version, sizeof(s_dvc_dll_version));
 #endif
 }
 
@@ -433,6 +443,8 @@ static void reset_runtime_status_counters(void)
     s_display_fps = 0;
     s_display_multiplier = 0;
     s_mfg_cap = 0;
+    s_mfg_dynamic_supported = 0;
+    s_effective_mfg_policy = DLSS_MFG_POLICY_FIXED;
     s_effective_reflex_mode = -1;
     s_last_dlssg_status = 0;
     s_last_dlssg_frames_presented = 0;
@@ -442,10 +454,12 @@ static void reset_runtime_status_counters(void)
     s_dlssg_inputs_fence = VK_NULL_HANDLE;
     s_dlssg_inputs_fence_value = 0;
     s_dlssg_inputs_fence_waited_value = 0;
+    s_deepdvc_estimated_vram = 0;
     s_display_fps_window_start = std::chrono::steady_clock::now();
     snprintf(s_sr_dll_version, sizeof(s_sr_dll_version), "n/a");
     snprintf(s_rr_dll_version, sizeof(s_rr_dll_version), "n/a");
     snprintf(s_fg_dll_version, sizeof(s_fg_dll_version), "n/a");
+    snprintf(s_dvc_dll_version, sizeof(s_dvc_dll_version), "n/a");
 }
 
 static void clear_sl_function_pointers(void)
@@ -472,6 +486,8 @@ static void clear_sl_function_pointers(void)
     pfn_slDLSSDGetState = nullptr;
     pfn_slDLSSGGetState = nullptr;
     pfn_slPCLSetMarker = nullptr;
+    pfn_slDeepDVCSetOptions = nullptr;
+    pfn_slDeepDVCGetState = nullptr;
     pfn_slHookVkCmdBindPipeline = nullptr;
     pfn_slHookVkCmdBindDescriptorSets = nullptr;
     pfn_slHookVkBeginCommandBuffer = nullptr;
@@ -503,6 +519,8 @@ int g_dlss_sl_init_result    = 0;  /* slInit return code */
 int g_dlss_sl_sr_result      = 0;  /* slIsFeatureSupported(DLSS) return code */
 int g_dlss_sl_rr_result      = 0;  /* slIsFeatureSupported(DLSS_RR) return code */
 int g_dlss_sl_g_result       = 0;  /* slIsFeatureSupported(DLSS_G) return code */
+int g_dlss_sl_deepdvc_available = 0;
+int g_dlss_sl_deepdvc_result    = 0;  /* slIsFeatureSupported(DeepDVC) return code */
 int g_dlss_sl_setvk_result   = 0;  /* slSetVulkanInfo return code */
 int g_dlss_sl_reflex_available = 0;
 static uint32_t s_sl_req_graphics_queues = 0;
@@ -553,6 +571,16 @@ int dlss_sl_get_mfg_cap(void)
     return s_mfg_cap;
 }
 
+int dlss_sl_get_mfg_dynamic_supported(void)
+{
+    return s_mfg_dynamic_supported;
+}
+
+int dlss_sl_get_effective_mfg_policy(void)
+{
+    return s_effective_mfg_policy;
+}
+
 int dlss_sl_get_effective_reflex_mode(void)
 {
     return s_effective_reflex_mode;
@@ -589,6 +617,17 @@ const char* dlss_sl_get_fg_dll_version(void)
 {
     refresh_runtime_feature_versions();
     return s_fg_dll_version;
+}
+
+const char* dlss_sl_get_dvc_dll_version(void)
+{
+    refresh_runtime_feature_versions();
+    return s_dvc_dll_version;
+}
+
+uint64_t dlss_sl_deepdvc_get_estimated_vram(void)
+{
+    return s_deepdvc_estimated_vram;
 }
 
 bool dlss_sl_get_latest_reflex_report(DlssReflexDebugReport_t *out)
@@ -858,8 +897,9 @@ static int resolve_supported_dlss_rr_mode(
 }
 
 /*
- * Preset mapping (DlssPreset_t → sl::DLSSPreset):
- * D/E are deprecated for DLSS SR in this Streamline SDK, so map them to K.
+ * Preset mapping (DlssPreset_t -> sl::DLSSPreset).
+ * In Streamline 2.11.1 the recommended DLSS SR preset policy is:
+ * K for DLAA/Balanced/Quality, M for Performance, L for Ultra Performance.
  */
 static sl::DLSSPreset map_preset(int p)
 {
@@ -873,6 +913,30 @@ static sl::DLSSPreset map_preset(int p)
     case DLSS_PRESET_M: return sl::DLSSPreset::ePresetM;
     default: return sl::DLSSPreset::eDefault;
     }
+}
+
+static sl::DLSSPreset recommended_preset_for_mode(int mode)
+{
+    switch (mode) {
+    case DLSS_MODE_ULTRA_PERFORMANCE:
+        return sl::DLSSPreset::ePresetL;
+    case DLSS_MODE_PERFORMANCE:
+        return sl::DLSSPreset::ePresetM;
+    case DLSS_MODE_BALANCED:
+    case DLSS_MODE_QUALITY:
+    case DLSS_MODE_ULTRA_QUALITY:
+    case DLSS_MODE_DLAA:
+    case DLSS_MODE_CUSTOM:
+    default:
+        return sl::DLSSPreset::ePresetK;
+    }
+}
+
+static sl::DLSSPreset map_preset_for_mode(int mode, int p)
+{
+    if (p == DLSS_PRESET_DEFAULT)
+        return recommended_preset_for_mode(mode);
+    return map_preset(p);
 }
 
 static sl::DLSSDPreset map_rr_preset(int p)
@@ -1094,7 +1158,25 @@ int dlss_sl_startup(int want_mfg)
      * Since sl.reflex (kFeatureReflex) is always loaded, NvLowLatency is available and
      * sl.dlss_g no longer crashes when MFG=0. Load it unconditionally so the user can
      * toggle MFG at runtime without restarting. */
-    sl::Feature features_all[] = { sl::kFeatureDLSS, sl::kFeatureDLSS_RR, sl::kFeatureDLSS_G, sl::kFeatureReflex };
+    std::vector<sl::Feature> features_all = {
+        sl::kFeatureDLSS,
+        sl::kFeatureDLSS_RR,
+        sl::kFeatureDLSS_G,
+        sl::kFeatureReflex,
+        sl::kFeaturePCL
+    };
+#ifdef _WIN32
+    wchar_t deepdvc_path[MAX_PATH] = {};
+    swprintf_s(deepdvc_path, MAX_PATH, L"%ls%ls", s_sl_dir, L"sl.deepdvc.dll");
+    if (GetFileAttributesW(deepdvc_path) != INVALID_FILE_ATTRIBUTES) {
+        features_all.push_back(sl::kFeatureDeepDVC);
+        sl_log_printf("[DeepDVC] sl.deepdvc.dll found, loading feature\n");
+    } else {
+        sl_log_printf("[DeepDVC] sl.deepdvc.dll not found, feature stays unavailable\n");
+    }
+#else
+    features_all.push_back(sl::kFeatureDeepDVC);
+#endif
 
     sl::Preferences prefs{};
     prefs.showConsole         = false;
@@ -1103,8 +1185,8 @@ int dlss_sl_startup(int want_mfg)
     prefs.renderAPI           = sl::RenderAPI::eVulkan;
     prefs.pathsToPlugins      = plugin_paths;
     prefs.numPathsToPlugins   = 1;
-    prefs.featuresToLoad      = features_all;
-    prefs.numFeaturesToLoad   = 4;
+    prefs.featuresToLoad      = features_all.data();
+    prefs.numFeaturesToLoad   = (uint32_t)features_all.size();
     /* applicationId must be non-zero for NGX initialization (DLSS SR requires NGX).
        Using Steam App ID for Quake II RTX: 1089130 */
     prefs.applicationId       = 1089130;
@@ -1239,6 +1321,8 @@ void dlss_sl_shutdown(void)
     g_dlss_sl_sr_result = 0;
     g_dlss_sl_rr_result = 0;
     g_dlss_sl_g_result = 0;
+    g_dlss_sl_deepdvc_available = 0;
+    g_dlss_sl_deepdvc_result = 0;
     g_dlss_sl_setvk_result = 0;
     g_dlss_sl_reflex_available = 0;
     s_sl_req_graphics_queues = 0;
@@ -1377,6 +1461,8 @@ static void dlss_sl_complete_vulkan_setup(
     slGetFeatureFunction(sl::kFeatureReflex, "slReflexSleep",      (void*&)pfn_slReflexSleep);
     slGetFeatureFunction(sl::kFeatureReflex, "slReflexGetState",   (void*&)pfn_slReflexGetState);
     slGetFeatureFunction(sl::kFeatureDLSS_G, "slDLSSGGetState",    (void*&)pfn_slDLSSGGetState);
+    slGetFeatureFunction(sl::kFeatureDeepDVC, "slDeepDVCSetOptions", (void*&)pfn_slDeepDVCSetOptions);
+    slGetFeatureFunction(sl::kFeatureDeepDVC, "slDeepDVCGetState",   (void*&)pfn_slDeepDVCGetState);
     slGetFeatureFunction(sl::kFeatureCommon, "slHookVkCmdBindPipeline",       (void*&)pfn_slHookVkCmdBindPipeline);
     slGetFeatureFunction(sl::kFeatureCommon, "slHookVkCmdBindDescriptorSets", (void*&)pfn_slHookVkCmdBindDescriptorSets);
     slGetFeatureFunction(sl::kFeatureCommon, "slHookVkBeginCommandBuffer",    (void*&)pfn_slHookVkBeginCommandBuffer);
@@ -1387,6 +1473,7 @@ static void dlss_sl_complete_vulkan_setup(
      * Without these markers, DLSS-G logs "missing common constants" and disables FG every frame. */
     slGetFeatureFunction(sl::kFeaturePCL, "slPCLSetMarker", (void*&)pfn_slPCLSetMarker);
     fprintf(stdout, "[DLSS-G] slPCLSetMarker: %s\n", pfn_slPCLSetMarker ? "loaded" : "MISSING");
+    fprintf(stdout, "[DeepDVC] slDeepDVCSetOptions: %s\n", pfn_slDeepDVCSetOptions ? "loaded" : "MISSING");
     sl_log_printf("[SL common] hooks: BeginCommandBuffer=%s CmdBindPipeline=%s CmdBindDescriptorSets=%s\n",
         pfn_slHookVkBeginCommandBuffer ? "loaded" : "missing",
         pfn_slHookVkCmdBindPipeline ? "loaded" : "missing",
@@ -1398,12 +1485,15 @@ static void dlss_sl_complete_vulkan_setup(
     sl::Result res_sr  = slIsFeatureSupported(sl::kFeatureDLSS,    ai);
     sl::Result res_rr  = slIsFeatureSupported(sl::kFeatureDLSS_RR, ai);
     sl::Result res_mfg = slIsFeatureSupported(sl::kFeatureDLSS_G,  ai);
+    sl::Result res_dvc = slIsFeatureSupported(sl::kFeatureDeepDVC, ai);
     g_dlss_sl_sr_result   = (int)res_sr;
     g_dlss_sl_rr_result   = (int)res_rr;
     g_dlss_sl_g_result    = (int)res_mfg;
+    g_dlss_sl_deepdvc_result = (int)res_dvc;
     g_dlss_sl_available   = (res_sr  == sl::Result::eOk) ? 1 : 0;
     g_dlss_sl_rr_available = (res_rr == sl::Result::eOk) ? 1 : 0;
     g_dlss_sl_g_available = (res_mfg == sl::Result::eOk) ? 1 : 0;
+    g_dlss_sl_deepdvc_available = (res_dvc == sl::Result::eOk && pfn_slDeepDVCSetOptions) ? 1 : 0;
 
     if (g_dlss_sl_available) {
         sl::Result r = slAllocateResources(nullptr, sl::kFeatureDLSS, s_vp);
@@ -1577,12 +1667,12 @@ void dlss_sl_set_options(int mode, int preset,
     if (!s_sl_loaded || !g_dlss_sl_available) return;
     (void)render_w; (void)render_h; /* reserved: not in DLSSOptions v2.8 */
 
-    sl::DLSSPreset p = map_preset(preset);
     int effective_mode = mode;
     if (mode == 5) {
         uint32_t ignored_w = 0, ignored_h = 0;
         effective_mode = resolve_supported_dlss_mode(mode, out_w, out_h, &ignored_w, &ignored_h);
     }
+    sl::DLSSPreset p = map_preset_for_mode(effective_mode, preset);
 
     sl::DLSSOptions opts{};
     opts.mode                   = map_mode(effective_mode);
@@ -1753,7 +1843,7 @@ void dlss_sl_rr_evaluate(VkCommandBuffer cmd_buf)
  * DLSS-G / MFG
  * ====================================================================*/
 
-void dlss_sl_set_g_options(int mfg_mode,
+void dlss_sl_set_g_options(int mfg_mode, int mfg_policy, float dynamic_target_fps,
     uint32_t color_w, uint32_t color_h,
     uint32_t mvec_w,  uint32_t mvec_h,
     uint32_t num_backbuffers,
@@ -1762,7 +1852,8 @@ void dlss_sl_set_g_options(int mfg_mode,
     uint32_t depth_fmt,
     uint32_t hudless_fmt,
     uint32_t ui_fmt,
-    int dynamic_resolution)
+    int dynamic_resolution,
+    int queue_parallelism)
 {
     if (!s_sl_loaded || !g_dlss_sl_g_available) return;
 
@@ -1783,9 +1874,27 @@ void dlss_sl_set_g_options(int mfg_mode,
      * create/recreate — otherwise DLSS-G dereferences unset resource slots → crash. */
     if (mfg_mode == 0 || !s_g_tags_valid) {
         opts.mode = sl::DLSSGMode::eOff;
+        s_effective_mfg_policy = DLSS_MFG_POLICY_FIXED;
     } else {
-        opts.mode                = sl::DLSSGMode::eOn;
-        opts.numFramesToGenerate = (uint32_t)(mfg_mode - 1); /* 2X=1, 3X=2, 4X=3 */
+        uint32_t generated_frames = (uint32_t)(mfg_mode - 1); /* 2X=1 ... 6X=5 */
+        if (s_mfg_cap > 1 && generated_frames > (uint32_t)(s_mfg_cap - 1))
+            generated_frames = (uint32_t)(s_mfg_cap - 1);
+        if (generated_frames < 1)
+            generated_frames = 1;
+
+        opts.numFramesToGenerate = generated_frames;
+
+        if (mfg_policy == DLSS_MFG_POLICY_DYNAMIC && s_mfg_dynamic_supported > 0) {
+            opts.mode = sl::DLSSGMode::eDynamic;
+            opts.dynamicTargetFrameRate = dynamic_target_fps > 0.0f ? dynamic_target_fps : 0.0f;
+            s_effective_mfg_policy = DLSS_MFG_POLICY_DYNAMIC;
+        } else if (mfg_policy == DLSS_MFG_POLICY_AUTO || mfg_policy == DLSS_MFG_POLICY_DYNAMIC) {
+            opts.mode = sl::DLSSGMode::eAuto;
+            s_effective_mfg_policy = DLSS_MFG_POLICY_AUTO;
+        } else {
+            opts.mode = sl::DLSSGMode::eOn;
+            s_effective_mfg_policy = DLSS_MFG_POLICY_FIXED;
+        }
     }
     opts.colorWidth           = color_w;
     opts.colorHeight          = color_h;
@@ -1797,14 +1906,14 @@ void dlss_sl_set_g_options(int mfg_mode,
     opts.depthBufferFormat    = depth_fmt;
     opts.hudLessBufferFormat  = hudless_fmt;
     opts.uiBufferFormat       = ui_fmt;
+    opts.enableUserInterfaceRecomposition = sl::Boolean::eFalse;
     if (dynamic_resolution)
         opts.flags = sl::DLSSGFlags::eDynamicResolutionEnabled;
-    /* Q2RTX currently submits almost all render work through a single presenting
-     * graphics queue. NVIDIA's guide notes that eBlockNoClientQueues is mainly
-     * beneficial for workloads with meaningful multi-queue parallelism. On this
-     * single-queue path it tends to over-constrain cadence because the host then
-     * must explicitly wait on the inputs-processing fence every frame. Keep the
-     * default mode instead. */
+    if (queue_parallelism)
+        opts.queueParallelismMode = sl::DLSSGQueueParallelismMode::eBlockNoClientQueues;
+    /* Default stays eBlockPresentingClientQueue. The opt-in path above exposes
+     * Streamline 2.11.1's Vulkan queue-parallel mode; Q2RTX already waits on
+     * DLSSGState::inputsProcessingCompletionFence before reusing tagged inputs. */
 
     if (s_g_options_valid && memcmp(&opts, &s_last_g_options, sizeof(opts)) == 0)
         return;
@@ -1838,12 +1947,16 @@ static void update_dlssg_present_state(void)
     if (r != sl::Result::eOk)
         return;
 
-    s_mfg_cap = (state.numFramesToGenerateMax >= 3) ? 4 :
-                (state.numFramesToGenerateMax >= 1) ? 2 : 0;
+    s_mfg_cap = state.numFramesToGenerateMax >= 1
+        ? (int)state.numFramesToGenerateMax + 1
+        : 0;
+    if (s_mfg_cap > DLSS_MFG_6X)
+        s_mfg_cap = DLSS_MFG_6X;
     s_last_dlssg_status = (int)state.status;
     s_last_dlssg_frames_presented = (int)state.numFramesActuallyPresented;
     s_last_dlssg_vsync_support = (state.bIsVsyncSupportAvailable == sl::Boolean::eTrue) ? 1 :
                                  (state.bIsVsyncSupportAvailable == sl::Boolean::eFalse) ? 0 : -1;
+    s_mfg_dynamic_supported = (state.bIsDynamicMFGSupported == sl::Boolean::eTrue) ? 1 : 0;
 
     if (state.inputsProcessingCompletionFence &&
         state.lastPresentInputsProcessingCompletionFenceValue > 0) {
@@ -2081,7 +2194,7 @@ void dlss_sl_tag_g_resources(
  * Reflex
  * ====================================================================*/
 
-void dlss_sl_reflex_set_options(int mode)
+void dlss_sl_reflex_set_options(int mode, int fps_cap)
 {
     if (!s_sl_loaded || !pfn_slReflexSetOptions) return;
 
@@ -2091,6 +2204,8 @@ void dlss_sl_reflex_set_options(int mode)
     case 2: opts.mode = sl::ReflexMode::eLowLatencyWithBoost; break;
     default: opts.mode = sl::ReflexMode::eOff;                break;
     }
+    if (fps_cap > 0)
+        opts.frameLimitUs = (uint32_t)floor(1000000.0 / (double)fps_cap + 0.5);
     /* Streamline docs mark this as an advanced option that most integrations
      * should leave disabled unless specifically advised by the Reflex team.
      * Q2RTX already supplies the normal PCL marker chain; forcing this path can
@@ -2112,8 +2227,8 @@ void dlss_sl_reflex_set_options(int mode)
         }
     }
 
-    fprintf(stderr, "[Reflex] slReflexSetOptions(mode=%d) -> result=%d available=%d\n",
-            mode, (int)r, g_dlss_sl_reflex_available);
+    fprintf(stderr, "[Reflex] slReflexSetOptions(mode=%d fps_cap=%d frameLimitUs=%u) -> result=%d available=%d\n",
+            mode, fps_cap, opts.frameLimitUs, (int)r, g_dlss_sl_reflex_available);
     if (r != sl::Result::eOk)
         fprintf(stderr, "[Reflex] *** slReflexSetOptions FAILED — DLSS-G will not work!\n");
 }
@@ -2336,6 +2451,82 @@ void dlss_sl_evaluate(VkCommandBuffer cmd_buf)
         reinterpret_cast<sl::CommandBuffer*>(cmd_buf));
     if (res != sl::Result::eOk)
         fprintf(stderr, "[DLSS] slEvaluateFeature failed: %d\n", (int)res);
+}
+
+void dlss_sl_deepdvc_set_options(int enabled, float intensity, float saturation_boost)
+{
+    if (!s_sl_loaded || !g_dlss_sl_deepdvc_available || !pfn_slDeepDVCSetOptions)
+        return;
+
+    if (intensity < 0.0f) intensity = 0.0f;
+    if (intensity > 1.0f) intensity = 1.0f;
+    if (saturation_boost < 0.0f) saturation_boost = 0.0f;
+    if (saturation_boost > 1.0f) saturation_boost = 1.0f;
+
+    sl::DeepDVCOptions opts{};
+    opts.mode = enabled ? sl::DeepDVCMode::eOn : sl::DeepDVCMode::eOff;
+    opts.intensity = intensity;
+    opts.saturationBoost = saturation_boost;
+
+    sl::Result res = pfn_slDeepDVCSetOptions(s_vp, opts);
+    if (res != sl::Result::eOk) {
+        fprintf(stderr, "[DeepDVC] slDeepDVCSetOptions failed: %d\n", (int)res);
+        sl_log_printf("[DeepDVC] slDeepDVCSetOptions failed: %d\n", (int)res);
+    }
+}
+
+void dlss_sl_deepdvc_tag_resource(VkCommandBuffer cmd_buf,
+    VkImage color, VkImageView color_view,
+    uint32_t layout_color, uint32_t fmt_color,
+    uint32_t resource_w, uint32_t resource_h,
+    uint32_t valid_w, uint32_t valid_h)
+{
+    if (!s_sl_loaded || !g_dlss_sl_deepdvc_available || !s_frame_token)
+        return;
+    if (color == VK_NULL_HANDLE || color_view == VK_NULL_HANDLE)
+        return;
+    if (!resource_w || !resource_h || !valid_w || !valid_h)
+        return;
+
+    sl::Resource r_color(sl::ResourceType::eTex2d, (void*)color, nullptr, (void*)color_view, layout_color);
+    r_color.width = resource_w;
+    r_color.height = resource_h;
+    r_color.nativeFormat = fmt_color;
+
+    sl::Extent color_ext = { 0, 0, valid_w, valid_h };
+    sl::ResourceTag tag(&r_color, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &color_ext);
+
+    sl::Result res = slSetTagForFrame(*s_frame_token, s_vp, &tag, 1,
+        reinterpret_cast<sl::CommandBuffer*>(cmd_buf));
+    if (res != sl::Result::eOk) {
+        fprintf(stderr, "[DeepDVC] slSetTagForFrame failed: %d\n", (int)res);
+        sl_log_printf("[DeepDVC] slSetTagForFrame failed: %d\n", (int)res);
+    }
+}
+
+void dlss_sl_deepdvc_evaluate(VkCommandBuffer cmd_buf)
+{
+    if (!s_sl_loaded || !g_dlss_sl_deepdvc_available || !s_frame_token)
+        return;
+
+    const sl::BaseStructure* inputs[] = {
+        reinterpret_cast<const sl::BaseStructure*>(&s_vp)
+    };
+
+    sl::Result res = slEvaluateFeature(
+        sl::kFeatureDeepDVC, *s_frame_token, inputs, 1,
+        reinterpret_cast<sl::CommandBuffer*>(cmd_buf));
+    if (res != sl::Result::eOk) {
+        fprintf(stderr, "[DeepDVC] slEvaluateFeature failed: %d\n", (int)res);
+        sl_log_printf("[DeepDVC] slEvaluateFeature failed: %d\n", (int)res);
+        return;
+    }
+
+    if (pfn_slDeepDVCGetState) {
+        sl::DeepDVCState state{};
+        if (pfn_slDeepDVCGetState(s_vp, state) == sl::Result::eOk)
+            s_deepdvc_estimated_vram = state.estimatedVRAMUsageInBytes;
+    }
 }
 
 } /* extern "C" */

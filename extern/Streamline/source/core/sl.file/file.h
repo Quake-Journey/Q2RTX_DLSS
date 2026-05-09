@@ -184,7 +184,7 @@ inline const wchar_t* getTmpPath()
 inline std::string getRealPath(const char* filename)
 {
 #ifdef SL_WINDOWS
-    auto file = CreateFile(filename,   // file to open
+    auto file = CreateFileA(filename,   // file to open
         GENERIC_READ,          // open for reading
         FILE_SHARE_READ,       // share for reading
         NULL,                  // default security

@@ -747,55 +747,243 @@ extern bool CL_IsMfgEnabled(void);
 extern int CL_GetResolutionScale(void);
 extern bool CL_GetDlssDebugOverlay(char *buffer, size_t size);
 
-static void SCR_DrawFPS(void)
+static bool SCR_LabelEquals(const char *label, size_t label_len, const char *name)
 {
-	if (scr_fps->integer == 0)
-		return;
-
-	int fps = R_FPS;
-	int display_fps = CL_GetDisplayFps();
-	int display_multiplier = CL_GetDisplayMultiplier();
-	bool mfg_enabled = CL_IsMfgEnabled();
-	int scale = CL_GetResolutionScale();
-
-	char buffer[MAX_QPATH];
-	if (mfg_enabled && display_fps <= 0)
-		display_fps = fps * display_multiplier;
-
-	if (scr_fps->integer == 2 && cls.ref_type == REF_TYPE_VKPT) {
-		if (mfg_enabled)
-			Q_snprintf(buffer, MAX_QPATH, "%d / %d FPS at %3d%%", fps, display_fps, scale);
-		else
-			Q_snprintf(buffer, MAX_QPATH, "%d FPS at %3d%%", fps, scale);
-	}
-	else if (mfg_enabled)
-		Q_snprintf(buffer, MAX_QPATH, "%d / %d FPS", fps, display_fps);
-	else
-		Q_snprintf(buffer, MAX_QPATH, "%d FPS", fps);
-
-	int x = scr.hud_width - 2;
-	int y = 1;
-
-	R_SetColor(~0u);
-	SCR_DrawString(x, y, UI_RIGHT, buffer);
+	return strlen(name) == label_len && !Q_stricmpn(label, name, label_len);
 }
 
-static void SCR_DrawDlssOverlay(void)
+static bool SCR_TextContains(const char *text, size_t text_len, const char *needle)
 {
-	char dlss_overlay[768];
-	int x, y;
+	size_t needle_len = strlen(needle);
 
-	if (!CL_GetDlssDebugOverlay(dlss_overlay, sizeof(dlss_overlay)))
+	if (!needle_len || needle_len > text_len)
+		return false;
+
+	for (size_t i = 0; i + needle_len <= text_len; ++i) {
+		if (!Q_stricmpn(text + i, needle, needle_len))
+			return true;
+	}
+
+	return false;
+}
+
+static uint32_t SCR_PerfLabelColor(const char *label, size_t label_len)
+{
+	if (SCR_LabelEquals(label, label_len, "FPS"))
+		return MakeColor(102, 229, 255, 255);
+	if (SCR_LabelEquals(label, label_len, "DLSS") ||
+		SCR_LabelEquals(label, label_len, "SR") ||
+		SCR_LabelEquals(label, label_len, "Render") ||
+		SCR_LabelEquals(label, label_len, "Output") ||
+		SCR_LabelEquals(label, label_len, "Scale"))
+		return MakeColor(92, 176, 255, 255);
+	if (SCR_LabelEquals(label, label_len, "RR"))
+		return MakeColor(194, 132, 255, 255);
+	if (SCR_LabelEquals(label, label_len, "MFG") ||
+		SCR_LabelEquals(label, label_len, "FG") ||
+		SCR_LabelEquals(label, label_len, "cap") ||
+		SCR_LabelEquals(label, label_len, "max") ||
+		SCR_LabelEquals(label, label_len, "runtime") ||
+		SCR_LabelEquals(label, label_len, "native") ||
+		SCR_LabelEquals(label, label_len, "policy") ||
+		SCR_LabelEquals(label, label_len, "queue") ||
+		SCR_LabelEquals(label, label_len, "dynamic") ||
+		SCR_LabelEquals(label, label_len, "Reflex"))
+		return MakeColor(255, 190, 92, 255);
+	if (SCR_LabelEquals(label, label_len, "DLL") ||
+		SCR_LabelEquals(label, label_len, "Mip") ||
+		SCR_LabelEquals(label, label_len, "base") ||
+		SCR_LabelEquals(label, label_len, "auto") ||
+		SCR_LabelEquals(label, label_len, "TAA") ||
+		SCR_LabelEquals(label, label_len, "AS") ||
+		SCR_LabelEquals(label, label_len, "VAR"))
+		return MakeColor(116, 231, 187, 255);
+	if (SCR_LabelEquals(label, label_len, "Denoiser") ||
+		SCR_LabelEquals(label, label_len, "Accum"))
+		return MakeColor(160, 222, 116, 255);
+
+	return MakeColor(188, 204, 220, 255);
+}
+
+static uint32_t SCR_PerfValueColor(const char *value, size_t value_len)
+{
+	if (SCR_TextContains(value, value_len, " off") ||
+		SCR_TextContains(value, value_len, " no") ||
+		SCR_TextContains(value, value_len, " unavailable"))
+		return MakeColor(130, 143, 156, 255);
+	if (SCR_TextContains(value, value_len, " on") ||
+		SCR_TextContains(value, value_len, " yes") ||
+		SCR_TextContains(value, value_len, " available") ||
+		SCR_TextContains(value, value_len, "replaced"))
+		return MakeColor(164, 230, 105, 255);
+
+	return MakeColor(235, 242, 247, 255);
+}
+
+static void SCR_DrawPerfText(int x, int y, const char *s, size_t len, uint32_t color, bool bold)
+{
+	if (!len)
 		return;
 
-	x = scr.hud_width - 2;
-	y = 1;
+	R_SetColor(MakeColor(0, 0, 0, 175));
+	R_DrawString(x + 1, y + 1, 0, len, s, scr.font_pic);
 
-	if (scr_fps->integer != 0)
-		y += CHAR_HEIGHT;
+	R_SetColor(color);
+	R_DrawString(x, y, 0, len, s, scr.font_pic);
+	if (bold)
+		R_DrawString(x + 1, y, 0, len, s, scr.font_pic);
+}
 
-	R_SetColor(~0u);
-	SCR_DrawStringMulti(x, y, UI_RIGHT, sizeof(dlss_overlay), dlss_overlay, scr.font_pic);
+static int SCR_DrawPerfToken(int x, int y, const char *token, size_t token_len)
+{
+	size_t label_len = 0;
+
+	while (label_len < token_len && token[label_len] != ' ')
+		label_len++;
+
+	SCR_DrawPerfText(x, y, token, label_len,
+		SCR_PerfLabelColor(token, label_len), true);
+	x += (int)label_len * CHAR_WIDTH;
+
+	if (label_len < token_len) {
+		const char *value = token + label_len;
+		size_t value_len = token_len - label_len;
+		SCR_DrawPerfText(x, y, value, value_len,
+			SCR_PerfValueColor(value, value_len), false);
+		x += (int)value_len * CHAR_WIDTH;
+	}
+
+	return x;
+}
+
+static void SCR_DrawPerfLine(int right_x, int y, const char *line)
+{
+	const char *p = line;
+	size_t line_len = strlen(line);
+	int x = right_x - (int)line_len * CHAR_WIDTH;
+
+	if (x < 2)
+		x = 2;
+
+	while (*p) {
+		if (p[0] == ' ' && p[1] == ' ') {
+			x += 2 * CHAR_WIDTH;
+			p += 2;
+			continue;
+		}
+
+		const char *start = p;
+		while (*p && !(p[0] == ' ' && p[1] == ' '))
+			p++;
+
+		x = SCR_DrawPerfToken(x, y, start, (size_t)(p - start));
+	}
+}
+
+static void SCR_AddPerfLine(char lines[][256], int *line_count, const char *line)
+{
+	if (*line_count >= 10 || !line || !line[0])
+		return;
+
+	Q_strlcpy(lines[*line_count], line, 256);
+	(*line_count)++;
+}
+
+static void SCR_AddDlssPerfLines(char lines[][256], int *line_count, char *overlay)
+{
+	char *line = overlay;
+
+	while (line && *line && *line_count < 10) {
+		char *next = strchr(line, '\n');
+		if (next)
+			*next++ = 0;
+		SCR_AddPerfLine(lines, line_count, line);
+		line = next;
+	}
+}
+
+static void SCR_DrawPerformanceOverlay(void)
+{
+	char lines[10][256];
+	char buffer[256];
+	char dlss_overlay[768];
+	int line_count = 0;
+	size_t max_len = 0;
+	int top = 2;
+	int pad_x = 6;
+	int pad_y = 4;
+	int right = scr.hud_width - 3 - pad_x;
+
+	if (scr_fps->integer != 0) {
+		int fps = R_FPS;
+		int display_fps = CL_GetDisplayFps();
+		int display_multiplier = CL_GetDisplayMultiplier();
+		bool mfg_enabled = CL_IsMfgEnabled();
+		int scale = CL_GetResolutionScale();
+
+		if (mfg_enabled && display_fps <= 0)
+			display_fps = fps * display_multiplier;
+
+		if (scr_fps->integer == 2 && cls.ref_type == REF_TYPE_VKPT) {
+			if (mfg_enabled)
+				Q_snprintf(buffer, sizeof(buffer), "FPS render %d  display %d  scale %d%%", fps, display_fps, scale);
+			else
+				Q_snprintf(buffer, sizeof(buffer), "FPS render %d  scale %d%%", fps, scale);
+		}
+		else if (mfg_enabled)
+			Q_snprintf(buffer, sizeof(buffer), "FPS render %d  display %d", fps, display_fps);
+		else
+			Q_snprintf(buffer, sizeof(buffer), "FPS render %d", fps);
+
+		SCR_AddPerfLine(lines, &line_count, buffer);
+	}
+
+	if (CL_GetDlssDebugOverlay(dlss_overlay, sizeof(dlss_overlay)))
+		SCR_AddDlssPerfLines(lines, &line_count, dlss_overlay);
+
+	if (!line_count)
+		return;
+
+	for (int i = 0; i < line_count; ++i) {
+		size_t len = strlen(lines[i]);
+		if (len > max_len)
+			max_len = len;
+	}
+
+	int panel_w = (int)max_len * CHAR_WIDTH + pad_x * 2;
+	int panel_h = line_count * CHAR_HEIGHT + pad_y * 2;
+	int panel_x = right - panel_w + pad_x;
+	if (panel_x < 2)
+		panel_x = 2;
+
+	R_DrawFill32(panel_x, top, panel_w, panel_h, MakeColor(5, 9, 15, 190));
+	R_DrawFill32(panel_x, top, panel_w, 1, MakeColor(90, 190, 255, 235));
+	R_DrawFill32(panel_x, top, 2, panel_h, MakeColor(255, 190, 92, 235));
+
+	for (int i = 0; i < line_count; ++i)
+		SCR_DrawPerfLine(right, top + pad_y + i * CHAR_HEIGHT, lines[i]);
+
+	R_ClearColor();
+}
+
+static void SCR_DrawMenuPerformanceOverlay(void)
+{
+	if (scr_draw2d->integer <= 0)
+		return;
+
+	scr.hud_height = Q_rint(r_config.height * scr.hud_scale);
+	scr.hud_width = Q_rint(r_config.width * scr.hud_scale);
+
+	R_SetAlphaScale(scr.hud_alpha);
+	R_SetScale(scr.hud_scale);
+	R_ClearColor();
+	R_SetAlpha(Cvar_ClampValue(scr_alpha, 0, 1));
+
+	SCR_DrawPerformanceOverlay();
+
+	R_ClearColor();
+	R_SetScale(1.0f);
+	R_SetAlphaScale(1.0f);
 }
 
 /*
@@ -2147,8 +2335,7 @@ static void SCR_Draw2D(void)
 
 	SCR_DrawObjects();
 
-	SCR_DrawFPS();
-	SCR_DrawDlssOverlay();
+	SCR_DrawPerformanceOverlay();
 
     SCR_DrawChatHUD();
 
@@ -2246,6 +2433,10 @@ void SCR_UpdateScreen(void)
 
     // draw main menu
     UI_Draw(cls.realtime);
+
+    if ((cls.key_dest & KEY_MENU) && cls.state == ca_active) {
+        SCR_DrawMenuPerformanceOverlay();
+    }
 
     // draw console
     Con_DrawConsole();

@@ -66,6 +66,7 @@ typedef enum {
 #define QMF_HIDDEN          BIT(4)
 #define QMF_DISABLED        BIT(5)
 #define QMF_CUSTOM_COLOR    BIT(6)
+#define QMF_LIVE            BIT(7)
 
 typedef enum {
     QMS_NOTHANDLED,

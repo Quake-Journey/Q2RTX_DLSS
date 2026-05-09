@@ -1,179 +1,243 @@
-Q2RTX DLSS Edition by ly — Public Beta 0.8
+Q2RTX DLSS Edition by ly - Public Beta 0.9
+Streamline 2.11.1 / DLSS 4.5
 Based on Q2RTX 1.8.1
 
 Назначение
-Эта публичная бета-сборка предназначена для тестирования интеграции NVIDIA DLSS Super Resolution, DLSS Ray Reconstruction, DLSS Multi Frame Generation и NVIDIA Reflex в Q2RTX.
+Эта публичная бета-сборка предназначена для тестирования интеграции NVIDIA Streamline 2.11.1, DLSS Super Resolution, DLSS Ray Reconstruction, DLSS Multi Frame Generation, NVIDIA Reflex и RTX Dynamic Vibrance / DeepDVC в Q2RTX.
 
-Сборка ориентирована на владельцев совместимых NVIDIA RTX GPU и предназначена именно для бета-теста: сравнения качества изображения, поиска артефактов и проверки совместимости на разных конфигурациях.
+Сборка ориентирована на владельцев совместимых NVIDIA RTX GPU и предназначена для проверки качества изображения, производительности, совместимости и поведения новых режимов DLSS в реальной игре.
 
 Важно
-- В пакет намеренно включён текущий рабочий q2config.cfg.
-- Перед установкой желательно сделать резервную копию своего q2config.cfg.
-- Это бета-версия. Некоторые режимы всё ещё могут вести себя нестабильно или давать артефакты в отдельных сценах.
-- Оригинальные игровые pak-файлы в этот пакет не входят по лицензионным причинам. Для запуска нужна уже установленная копия Quake II RTX / Quake II RTX Remaster с легально полученными базовыми данными игры.
+- Оригинальные игровые .pak-файлы в этот пакет не входят по лицензионным причинам.
+- Для запуска нужна уже установленная легальная копия Quake II RTX / Quake II RTX Remaster с базовыми данными игры.
+- Пакет ставится поверх существующей папки Q2RTX.
+- В пакет намеренно включён рабочий baseq2\q2config.cfg. Перед установкой желательно сделать резервную копию своего baseq2\q2config.cfg.
+- Это beta/release-candidate сборка. Некоторые режимы зависят от GPU, драйвера и текущего NVIDIA runtime.
 
 Установка
 1. Сделайте резервную копию своей текущей папки Q2RTX или хотя бы файла baseq2\q2config.cfg.
-2. Скопируйте содержимое папки/архива Q2RTX-Beta в каталог Q2RTX вашей установки Quake II RTX.
+2. Распакуйте архив в каталог Q2RTX вашей установленной Quake II RTX.
 3. Разрешите замену файлов.
-4. Запустите q2rtx.exe.
+4. Убедитесь, что ваши легальные .pak-файлы остаются на месте в baseq2.
+5. Запустите q2rtx.exe.
 
-Что входит в эту бету
-- NVIDIA DLSS Super Resolution
-- DLAA
-- DLSS Custom Scale
-- DLSS Ray Reconstruction
-- DLSS Multi Frame Generation 2X / 3X / 4X
-- NVIDIA Reflex
-- DLSS debug overlay с выводом пресетов, DLL-версий и активных параметров
-- Улучшенный baseline для агрессивных DLSS-режимов через r_dlss_taa_input_profile 2
-- Улучшенный baseline для RR-отражений через flt_dlss_rr_specular_stabilizers 2
+Что входит в Public Beta 0.9
+- NVIDIA Streamline 2.11.1.
+- DLSS 4.5 runtime.
+- NVIDIA DLSS Super Resolution.
+- DLAA.
+- DLSS Custom Scale.
+- DLSS Ray Reconstruction.
+- DLSS Multi Frame Generation 2X / 3X / 4X / 5X / 6X.
+- Fixed / Auto / Dynamic-Variable MFG policy controls.
+- Отдельный лимит Variable MFG max.
+- Dynamic/Variable MFG target FPS.
+- NVIDIA Reflex.
+- NVIDIA Reflex FPS cap.
+- RTX Dynamic Vibrance / DeepDVC.
+- Live-применение всех параметров подменю NVIDIA DLSS.
+- Отдельное подменю Video -> NVIDIA DLSS.
+- Улучшенный цветной DLSS/FPS performance overlay.
+- Отображение overlay поверх меню, но только когда загружена игровая карта.
+- Настройка прозрачности меню.
+- Удобный пункт r_maxfps в DLSS-меню.
 
-Основные ограничения
-- MFG уже работает, но при агрессивных режимах DLSS SR и особенно в Ultra Performance может наблюдаться существенная просадка render FPS.
-- Для MFG рекомендуется тестировать игру с выключенным HDR.
-- RR уже работает стабильно, но в отдельных сценах с зеркалами, стеклом и сложными отражениями остаточные артефакты всё ещё возможны.
-- Формальный режим Ultra Quality скрыт из меню, вместо него используется режим Custom с ручной настройкой масштаба.
-- Поддержка MFG зависит от GPU и драйвера. В рамках этой беты:
-  - 2X рассчитан прежде всего на RTX 40/50;
-  - 3X и 4X — прежде всего на RTX 50.
-  Неподдерживаемые комбинации могут отображаться в настройках, но не гарантируются.
+Видео-меню
+Основные параметры DLSS теперь находятся в:
 
-Видео-меню: добавленные и изменённые пункты
-Все основные параметры находятся в Video -> RTX.
+Video -> NVIDIA DLSS
 
-1. NVIDIA DLSS
+Параметры применяются live, без закрытия меню. Это сделано специально для тестирования с прозрачным меню и включённым overlay.
+
+Основные пункты меню
+
+1. Max FPS
+- CVar: r_maxfps
+- Диапазон: 0..1000
+- 0 = лимит выключен.
+- Это стандартная переменная Q2RTX, вынесенная в меню для удобства тестов DLSS/MFG/Reflex.
+
+2. NVIDIA DLSS
 - CVar: flt_dlss_enable
-- Назначение: включает/выключает DLSS SR.
+- Включает или выключает DLSS Super Resolution.
 
-2. DLSS Ray Reconstruction
-- CVar: flt_dlss_rr
-- Назначение: включает DLSS RR.
-- При активном RR legacy denoiser считается заменённым.
-
-3. DLSS RR preset
-- CVar: flt_dlss_rr_preset
-- Значения:
-  - 0 = default
-  - 4 = D
-  - 5 = E
-
-4. DLSS mode
+3. DLSS mode
 - CVar: flt_dlss_mode
 - Значения:
-  - 1 = Ultra Performance
-  - 2 = Performance
-  - 3 = Balanced
-  - 4 = Quality
-  - 6 = DLAA
-  - 7 = Custom
-- В меню Ultra Quality скрыт. Для близкого аналога используйте Custom.
+  - Ultra Performance
+  - Performance
+  - Balanced
+  - Quality
+  - Custom
+  - DLAA
 
-5. DLSS custom scale
+4. DLSS custom scale
 - CVar: flt_dlss_custom_ratio
 - Диапазон: 33..99
-- Назначение: ручной выбор render scale для режима Custom.
+- Используется в режиме Custom.
 
-6. DLSS preset
+5. DLSS preset
 - CVar: flt_dlss_preset
 - Значения:
-  - 0 = default
-  - 6 = F
-  - 7 = J
-  - 8 = K (Transformer)
-  - 9 = L (Transformer 2)
-  - 10 = M (Transformer 2)
+  - recommended
+  - F
+  - J
+  - K
+  - L
+  - M
+- Recommended использует текущую рекомендуемую логику для разных DLSS-режимов.
 
-7. DLSS sharpness
+6. DLSS sharpness
 - CVar: flt_dlss_sharpness
-- Диапазон: 0..1
-- Назначение: резкость DLSS.
+- Диапазон: 0..1.
 
-8. DLSS auto-exposure
+7. DLSS auto-exposure
 - CVar: flt_dlss_auto_exposure
-- Назначение: включает автоэкспозицию DLSS.
 
-9. DLSS debug overlay
-- CVar: r_debug_dlss_overlay
-- Назначение: выводит в верхний overlay информацию о DLSS/RR/FG, пресетах, DLL-версиях, Reflex, scale и диагностических параметрах.
+8. RTX Dynamic Vibrance
+- CVar: flt_deepdvc
+- Streamline DeepDVC / RTX Dynamic Vibrance.
+- Работает в SDR. HDR для DeepDVC не является целевым режимом.
 
-10. DLSS MFG
+9. DeepDVC intensity
+- CVar: flt_deepdvc_intensity
+- Диапазон: 0..1.
+- Применяется live на загруженной карте.
+
+10. DeepDVC saturation
+- CVar: flt_deepdvc_saturation_boost
+- Диапазон: 0..1.
+- Применяется live на загруженной карте.
+
+11. DLSS Ray Reconstruction
+- CVar: flt_dlss_rr
+- При активном RR legacy denoiser считается заменённым.
+
+12. DLSS RR preset
+- CVar: flt_dlss_rr_preset
+- Значения:
+  - default
+  - D
+  - E
+
+13. DLSS MFG
 - CVar: flt_dlss_mfg
 - Значения:
-  - 0 = off
-  - 2 = 2X
-  - 3 = 3X
-  - 4 = 4X
+  - off
+  - 2X
+  - 3X
+  - 4X
+  - 5X
+  - 6X
 
-11. NVIDIA Reflex
+14. DLSS MFG policy
+- CVar: flt_dlss_mfg_policy
+- Значения:
+  - fixed
+  - auto
+  - dynamic
+
+15. DLSS MFG variable max
+- CVar: flt_dlss_mfg_dynamic_max
+- Значения:
+  - auto
+  - 2X
+  - 3X
+  - 4X
+  - 5X
+  - 6X
+- Используется как верхняя граница для Dynamic/Variable MFG.
+
+16. DLSS MFG dynamic target
+- CVar: flt_dlss_mfg_dynamic_target_fps
+- Диапазон: 0..480
+- 0 = auto по частоте дисплея.
+
+17. DLSS MFG queue mode
+- CVar: flt_dlss_mfg_queue_parallelism
+- Значения:
+  - default
+  - parallel
+
+18. NVIDIA Reflex
 - CVar: flt_dlss_reflex
 - Значения:
-  - 0 = off
-  - 1 = on
-  - 2 = on + boost
+  - off
+  - on
+  - on + boost
 
-12. denoiser
-- CVar: flt_enable
-- При включённом RR legacy denoiser не является основным реконструктором кадра и в UI отображается как replaced.
+19. NVIDIA Reflex FPS cap
+- CVar: flt_dlss_reflex_fps_cap
+- Диапазон: 0..480
+- 0 = выключено.
+
+20. DLSS debug overlay
+- CVar: r_debug_dlss_overlay
+- Показывает DLSS/RR/MFG/Reflex/DeepDVC состояние, пресеты, DLL-версии и параметры рендера.
+
+Дополнительные пункты Video
+
+Menu opacity
+- CVar: cl_menu_alpha
+- Диапазон: 0..1
+- Позволяет менять прозрачность фона меню во время игры.
+
+FPS counter
+- CVar: scr_fps
+- Значения:
+  - off
+  - show FPS
+  - show FPS and resolution scale
+
+Overlay
+При r_debug_dlss_overlay 1 и/или scr_fps overlay отображается:
+- во время игры на загруженной карте;
+- поверх любого открытого меню, если карта уже загружена;
+- не отображается поверх меню до загрузки игровой карты.
+
+Ограничения и важные замечания
+- MFG 5X/6X и Variable MFG зависят от GPU, драйвера и возможностей текущего Streamline/NVIDIA runtime.
+- 2X рассчитан прежде всего на RTX 40/50.
+- 3X/4X/5X/6X рассчитаны прежде всего на RTX 50 и только когда runtime сообщает поддержку.
+- Для серьёзного тестирования MFG рекомендуется выключать HDR.
+- DeepDVC рассчитан на SDR.
+- RR стабилен для обычной игры, но в сложных сценах с зеркалами, стеклом и отражениями остаточные артефакты возможны.
+- Ultra Quality не вынесен отдельным пунктом меню; для ручного аналога используйте Custom scale.
 
 Основные консольные переменные
-Пользовательские / рабочие
+- r_maxfps
+- cl_menu_alpha
+- scr_fps
 - flt_dlss_enable
-- flt_dlss_rr
-- flt_dlss_rr_preset
 - flt_dlss_mode
 - flt_dlss_custom_ratio
 - flt_dlss_preset
 - flt_dlss_sharpness
 - flt_dlss_auto_exposure
+- flt_deepdvc
+- flt_deepdvc_intensity
+- flt_deepdvc_saturation_boost
+- flt_dlss_rr
+- flt_dlss_rr_preset
 - flt_dlss_mfg
+- flt_dlss_mfg_policy
+- flt_dlss_mfg_dynamic_max
+- flt_dlss_mfg_dynamic_target_fps
+- flt_dlss_mfg_queue_parallelism
 - flt_dlss_reflex
+- flt_dlss_reflex_fps_cap
 - r_debug_dlss_overlay
 
-Продвинутые / бета
-- r_dlss_taa_input_profile
-  - 0 = legacy
-  - 1 = mild tuning
-  - 2 = current recommended baseline for aggressive DLSS SR modes
-- flt_dlss_rr_specular_stabilizers
-  - 0 = raw RR behavior
-  - 1 = partial RR reflection stabilization
-  - 2 = current recommended RR baseline
-- r_debug_pre_dlss_color
-- r_debug_post_dlss_color
-- r_debug_post_tonemap_color
-
-Рекомендуемая базовая конфигурация для теста
-- DLSS SR: под задачу пользователя
-- RR: по необходимости
-- MFG: тестировать отдельно от качества изображения
-- Reflex: on или on + boost при использовании MFG
-- r_dlss_taa_input_profile 2
-- flt_dlss_rr_specular_stabilizers 2
-
-Оверлей DLSS
-При включении r_debug_dlss_overlay 1 overlay показывает:
-- режим DLSS / RR / MFG
-- пресеты SR и RR
-- версии загруженных DLL
-- состояние Reflex
-- render resolution -> output resolution
-- scale
-- mip bias
-- параметры TAA / anti-sparkle / variance
+Диагностика Streamline
+- flt_dlss_sl_debug_log 0 - по умолчанию выключено, sl_debug.log не создаётся.
+- flt_dlss_sl_debug_log 1 - включает подробный лог Streamline в sl_debug.log рядом с q2rtx.exe.
+- Используйте только для диагностики.
 
 Credits / Third-party Content
 Часть моделей в этой сборке использует данные мода Cinematic Mod for Quake II RTX:
 https://www.moddb.com/mods/cinematic-mod-for-quake-ii-rtx/downloads
 
-Этот пакет публикуется как публичная бета для тестирования. Все права на Quake II RTX, NVIDIA Streamline / NGX и исходные сторонние компоненты принадлежат их правообладателям.
-
-
-DLSS / Streamline диагностика
-- `flt_dlss_sl_debug_log 0` — по умолчанию выключено, файл `sl_debug.log` не создаётся.
-- `flt_dlss_sl_debug_log 1` — включает подробный лог Streamline в `sl_debug.log` рядом с `q2rtx.exe`. Использовать только для диагностики.
-- Переменная доступна только через консоль / `q2config.cfg` и не вынесена в меню игры.
-
+Этот пакет публикуется как публичная beta/release-candidate сборка для тестирования. Все права на Quake II RTX, NVIDIA Streamline / NGX и сторонние компоненты принадлежат их правообладателям.
 
 Каналы проекта
 - Telegram: https://t.me/Q2RTX

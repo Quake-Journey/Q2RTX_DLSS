@@ -51,6 +51,12 @@ static const cmd_option_t o_common[] = {
     { NULL }
 };
 
+static const cmd_option_t o_cvar_common[] = {
+    { "s:", "status" },
+    { "l", "live" },
+    { NULL }
+};
+
 static void add_string(menuSpinControl_t *s, const char *tok)
 {
     if (s->numItems < MAX_MENU_ITEMS) {
@@ -119,13 +125,17 @@ static void long_args_hack(menuSpinControl_t *s, int argc)
 static void Parse_Spin(menuFrameWork_t *menu, menuType_t type)
 {
     menuSpinControl_t *s;
+    bool live = false;
     int c, i, numItems;
     char *status = NULL;
 
-    while ((c = Cmd_ParseOptions(o_common)) != -1) {
+    while ((c = Cmd_ParseOptions(o_cvar_common)) != -1) {
         switch (c) {
         case 's':
             status = cmd_optarg;
+            break;
+        case 'l':
+            live = true;
             break;
         default:
             return;
@@ -142,6 +152,8 @@ static void Parse_Spin(menuFrameWork_t *menu, menuType_t type)
     s->generic.type = type;
     s->generic.name = UI_CopyString(Cmd_Argv(cmd_optind));
     s->generic.status = UI_CopyString(status);
+    if (live)
+        s->generic.flags |= QMF_LIVE;
     s->cvar = Cvar_WeakGet(Cmd_Argv(cmd_optind + 1));
 
     cmd_optind += 2;
@@ -161,13 +173,17 @@ static void Parse_Spin(menuFrameWork_t *menu, menuType_t type)
 static void Parse_Pairs(menuFrameWork_t *menu)
 {
     menuSpinControl_t *s;
+    bool live = false;
     int c, i, numItems;
     char *status = NULL;
 
-    while ((c = Cmd_ParseOptions(o_common)) != -1) {
+    while ((c = Cmd_ParseOptions(o_cvar_common)) != -1) {
         switch (c) {
         case 's':
             status = cmd_optarg;
+            break;
+        case 'l':
+            live = true;
             break;
         default:
             return;
@@ -184,6 +200,8 @@ static void Parse_Pairs(menuFrameWork_t *menu)
     s->generic.type = MTYPE_PAIRS;
     s->generic.name = UI_CopyString(Cmd_Argv(cmd_optind));
     s->generic.status = UI_CopyString(status);
+    if (live)
+        s->generic.flags |= QMF_LIVE;
     s->cvar = Cvar_WeakGet(Cmd_Argv(cmd_optind + 1));
     numItems /= 2;
     s->itemnames = UI_Mallocz(sizeof(char *) * (numItems + 1));
@@ -201,6 +219,7 @@ static const cmd_option_t o_range[] = {
     { "s:", "status" },
     { "f:", "format" },
     { "p", "percentage" },
+    { "l", "live" },
     { NULL }
 };
 static void Parse_Range(menuFrameWork_t *menu)
@@ -209,6 +228,7 @@ static void Parse_Range(menuFrameWork_t *menu)
     char *status = NULL;
     char *format = NULL;
     bool percentage = false;
+    bool live = false;
     int c;
 
     while ((c = Cmd_ParseOptions(o_range)) != -1) {
@@ -221,6 +241,9 @@ static void Parse_Range(menuFrameWork_t *menu)
             break;
         case 'p':
             percentage = true;
+            break;
+        case 'l':
+            live = true;
             break;
         default:
             return;
@@ -236,6 +259,8 @@ static void Parse_Range(menuFrameWork_t *menu)
     s->generic.type = MTYPE_SLIDER;
     s->generic.name = UI_CopyString(Cmd_Argv(cmd_optind));
     s->generic.status = UI_CopyString(status);
+    if (live)
+        s->generic.flags |= QMF_LIVE;
     s->cvar = Cvar_WeakGet(Cmd_Argv(cmd_optind + 1));
     s->minvalue = Q_atof(Cmd_Argv(cmd_optind + 2));
     s->maxvalue = Q_atof(Cmd_Argv(cmd_optind + 3));
@@ -415,14 +440,18 @@ static void Parse_Toggle(menuFrameWork_t *menu)
     static const char *const yes_no_names[] = { "no", "yes", NULL };
     menuSpinControl_t *s;
     bool negate = false;
+    bool live = false;
     menuType_t type = MTYPE_TOGGLE;
     int c, bit = 0;
     char *b, *status = NULL;
 
-    while ((c = Cmd_ParseOptions(o_common)) != -1) {
+    while ((c = Cmd_ParseOptions(o_cvar_common)) != -1) {
         switch (c) {
         case 's':
             status = cmd_optarg;
+            break;
+        case 'l':
+            live = true;
             break;
         default:
             return;
@@ -452,6 +481,8 @@ static void Parse_Toggle(menuFrameWork_t *menu)
     s->generic.type = type;
     s->generic.name = UI_CopyString(Cmd_Argv(cmd_optind));
     s->generic.status = UI_CopyString(status);
+    if (live)
+        s->generic.flags |= QMF_LIVE;
     s->cvar = Cvar_WeakGet(Cmd_Argv(cmd_optind + 1));
     s->itemnames = (char **)yes_no_names;
     s->numItems = 2;

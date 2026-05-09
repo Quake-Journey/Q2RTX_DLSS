@@ -121,6 +121,8 @@ static cvar_t *cvar_r_dlss_taa_history_weight_balanced = NULL;
 static cvar_t *cvar_r_dlss_taa_anti_sparkle_scale = NULL;
 static cvar_t *cvar_r_dlss_taa_variance_scale = NULL;
 
+static void vkpt_deepdvc_apply_taa_output(VkCommandBuffer cmd_buf);
+
 #if USE_DEBUG
 cvar_t *cvar_pt_test_shell = NULL;
 #endif
@@ -249,9 +251,22 @@ static const char *mfg_mode_name(DlssMfgMode_t mode)
 	case DLSS_MFG_2X: return "2x";
 	case DLSS_MFG_3X: return "3x";
 	case DLSS_MFG_4X: return "4x";
+	case DLSS_MFG_5X: return "5x";
+	case DLSS_MFG_6X: return "6x";
 	case DLSS_MFG_OFF:
 	default:
 		return "off";
+	}
+}
+
+static const char *mfg_policy_name(DlssMfgPolicy_t policy)
+{
+	switch (policy) {
+	case DLSS_MFG_POLICY_AUTO: return "auto";
+	case DLSS_MFG_POLICY_DYNAMIC: return "dynamic";
+	case DLSS_MFG_POLICY_FIXED:
+	default:
+		return "fixed";
 	}
 }
 
@@ -267,7 +282,7 @@ static const char *dlss_preset_name(DlssPreset_t preset)
 	case DLSS_PRESET_M: return "M";
 	case DLSS_PRESET_DEFAULT:
 	default:
-		return "default";
+		return "recommended";
 	}
 }
 
@@ -291,6 +306,18 @@ static void append_overlay_token(char *dst, size_t dst_size, const char *token)
 		return;
 
 	Q_snprintf(dst + len, dst_size - len, "%s%s", len ? "  " : "", token);
+}
+
+static void append_overlay_line(char *dst, size_t dst_size, const char *line)
+{
+	if (!dst || !dst_size || !line || !line[0])
+		return;
+
+	size_t len = strlen(dst);
+	if (len >= dst_size - 1)
+		return;
+
+	Q_snprintf(dst + len, dst_size - len, "%s%s", len ? "\n" : "", line);
 }
 
 static float get_extent_resolution_scale(VkExtent2D render_extent, VkExtent2D output_extent)
@@ -520,7 +547,6 @@ static float get_effective_texture_lod_bias(bool fsr_enabled, bool dlss_rr_enabl
 bool R_GetDlssDebugOverlay(char *buffer, size_t size)
 {
 	const char *dlss_mode = "off";
-	const char *rr_state = "off";
 	const char *mfg_state = "off";
 	const char *denoiser_state = s_last_reference_enable_denoiser ? "on" : "off";
 	const char *sr_preset = "";
@@ -528,14 +554,28 @@ bool R_GetDlssDebugOverlay(char *buffer, size_t size)
 	const char *sr_dll_version = "";
 	const char *rr_dll_version = "";
 	const char *fg_dll_version = "";
+	const char *dvc_dll_version = "";
 	const char *reflex_requested = dlss_reflex_mode_name(vkpt_dlss_get_requested_reflex_mode());
 	const char *reflex_effective = dlss_reflex_mode_name(vkpt_dlss_get_effective_reflex_mode());
+	DlssMfgPolicy_t mfg_policy_requested_enum = vkpt_dlss_get_mfg_policy();
+	DlssMfgPolicy_t mfg_policy_effective_enum = vkpt_dlss_get_effective_mfg_policy();
+	const char *mfg_policy_requested = mfg_policy_name(mfg_policy_requested_enum);
+	const char *mfg_policy_effective = mfg_policy_name(mfg_policy_effective_enum);
+	int mfg_runtime_cap = vkpt_dlss_get_mfg_cap();
+	int mfg_dynamic_max = (int)vkpt_dlss_get_mfg_dynamic_max();
+	int mfg_queue_parallelism = vkpt_dlss_get_mfg_queue_parallelism();
+	int reflex_fps_cap = vkpt_dlss_get_reflex_fps_cap();
 	int accum_frames = s_last_reference_enable_accumulation ? num_accumulated_frames : 0;
 	char line_dlss[256];
+	char line_dll[256];
+	char line_deepdvc[160];
 	char line_fg[256];
+	char line_reflex[128];
 	char line_scale[256];
 	char line_misc[256];
+	char line_taa[128];
 	char reflex_token[64];
+	char mfg_policy_token[64];
 
 	if (!buffer || !size)
 		return false;
@@ -554,7 +594,6 @@ bool R_GetDlssDebugOverlay(char *buffer, size_t size)
 
 	if (vkpt_dlss_rr_is_enabled())
 	{
-		rr_state = "on";
 		rr_preset = dlss_preset_name(vkpt_dlss_get_rr_preset());
 		rr_dll_version = vkpt_dlss_get_rr_dll_version();
 	}
@@ -564,9 +603,14 @@ bool R_GetDlssDebugOverlay(char *buffer, size_t size)
 
 	if (vkpt_dlss_mfg_is_enabled())
 	{
-		mfg_state = mfg_mode_name(vkpt_dlss_get_mfg_mode());
+		mfg_state = (mfg_policy_requested_enum == DLSS_MFG_POLICY_DYNAMIC)
+			? "variable"
+			: mfg_mode_name(vkpt_dlss_get_mfg_mode());
 		fg_dll_version = vkpt_dlss_get_fg_dll_version();
 	}
+
+	if (vkpt_deepdvc_is_enabled())
+		dvc_dll_version = vkpt_deepdvc_get_dll_version();
 
 	line_dlss[0] = 0;
 	if (vkpt_dlss_is_enabled())
@@ -574,24 +618,60 @@ bool R_GetDlssDebugOverlay(char *buffer, size_t size)
 	else
 		append_overlay_token(line_dlss, sizeof(line_dlss), "DLSS off");
 	if (vkpt_dlss_is_enabled())
-		append_overlay_token(line_dlss, sizeof(line_dlss), va("SR %s DLL %s", sr_preset, sr_dll_version));
+		append_overlay_token(line_dlss, sizeof(line_dlss), va("SR %s", sr_preset));
 	else
 		append_overlay_token(line_dlss, sizeof(line_dlss), "SR off");
 	if (vkpt_dlss_rr_is_enabled())
-		append_overlay_token(line_dlss, sizeof(line_dlss), va("RR %s DLL %s", rr_preset, rr_dll_version));
+		append_overlay_token(line_dlss, sizeof(line_dlss), va("RR %s", rr_preset));
 	else
 		append_overlay_token(line_dlss, sizeof(line_dlss), "RR off");
 
+	line_dll[0] = 0;
+	if (vkpt_dlss_is_enabled())
+		append_overlay_token(line_dll, sizeof(line_dll), va("DLL SR %s", sr_dll_version));
+	if (vkpt_dlss_rr_is_enabled())
+		append_overlay_token(line_dll, sizeof(line_dll), va("RR %s", rr_dll_version));
+	if (vkpt_dlss_mfg_is_enabled())
+		append_overlay_token(line_dll, sizeof(line_dll), va("FG %s", fg_dll_version));
+	if (vkpt_deepdvc_is_enabled())
+		append_overlay_token(line_dll, sizeof(line_dll), va("DVC %s", dvc_dll_version));
+
+	line_deepdvc[0] = 0;
+	if (vkpt_deepdvc_is_enabled()) {
+		uint64_t dvc_vram = vkpt_deepdvc_get_estimated_vram();
+		append_overlay_token(line_deepdvc, sizeof(line_deepdvc), "DeepDVC on");
+		append_overlay_token(line_deepdvc, sizeof(line_deepdvc),
+			va("intensity %.2f", vkpt_deepdvc_get_intensity()));
+		append_overlay_token(line_deepdvc, sizeof(line_deepdvc),
+			va("saturation %.2f", vkpt_deepdvc_get_saturation_boost()));
+		if (dvc_vram)
+			append_overlay_token(line_deepdvc, sizeof(line_deepdvc),
+				va("vram %.1f MB", (double)dvc_vram / (1024.0 * 1024.0)));
+	} else if (vkpt_deepdvc_is_available()) {
+		append_overlay_token(line_deepdvc, sizeof(line_deepdvc), "DeepDVC off");
+	}
+
 	line_fg[0] = 0;
 	append_overlay_token(line_fg, sizeof(line_fg), va("MFG %s", mfg_state));
-	if (vkpt_dlss_mfg_is_enabled())
-		append_overlay_token(line_fg, sizeof(line_fg), va("FG DLL %s", fg_dll_version));
+	if (mfg_policy_requested_enum == DLSS_MFG_POLICY_DYNAMIC && mfg_dynamic_max >= DLSS_MFG_2X)
+		append_overlay_token(line_fg, sizeof(line_fg), va("max %dx", mfg_dynamic_max));
+	if (vkpt_dlss_g_is_available())
+		append_overlay_token(line_fg, sizeof(line_fg), va("runtime cap %dx", mfg_runtime_cap));
+	if (!strcmp(mfg_policy_requested, mfg_policy_effective))
+		Q_snprintf(mfg_policy_token, sizeof(mfg_policy_token), "policy %s", mfg_policy_requested);
+	else
+		Q_snprintf(mfg_policy_token, sizeof(mfg_policy_token), "policy %s -> %s", mfg_policy_requested, mfg_policy_effective);
+	append_overlay_token(line_fg, sizeof(line_fg), mfg_policy_token);
+	append_overlay_token(line_fg, sizeof(line_fg), va("queue %s", mfg_queue_parallelism ? "parallel" : "default"));
 
+	line_reflex[0] = 0;
 	if (!strcmp(reflex_requested, reflex_effective))
 		Q_snprintf(reflex_token, sizeof(reflex_token), "Reflex %s", reflex_requested);
 	else
 		Q_snprintf(reflex_token, sizeof(reflex_token), "Reflex %s -> %s", reflex_requested, reflex_effective);
-	append_overlay_token(line_fg, sizeof(line_fg), reflex_token);
+	append_overlay_token(line_reflex, sizeof(line_reflex), reflex_token);
+	if (reflex_fps_cap > 0)
+		append_overlay_token(line_reflex, sizeof(line_reflex), va("cap %d fps", reflex_fps_cap));
 
 	Q_snprintf(line_scale, sizeof(line_scale),
 		"Render %ux%u  Output %ux%u  Scale %.3f",
@@ -600,21 +680,28 @@ bool R_GetDlssDebugOverlay(char *buffer, size_t size)
 		s_last_dlss_resolution_scale);
 
 	Q_snprintf(line_misc, sizeof(line_misc),
-		"Mip %.2f (base %.2f auto %.2f)  Denoiser %s  Accum %d  TAA %.2f  AS %.2f  VAR %.2f",
+		"Mip %.2f  base %.2f  auto %.2f  Denoiser %s  Accum %d",
 		s_last_effective_texture_lod_bias,
 		s_last_base_texture_lod_bias,
 		s_last_auto_texture_lod_bias,
 		denoiser_state,
-		accum_frames,
+		accum_frames);
+
+	Q_snprintf(line_taa, sizeof(line_taa),
+		"TAA %.2f  AS %.2f  VAR %.2f",
 		s_last_effective_taa_history_weight,
 		s_last_effective_taa_anti_sparkle,
 		s_last_effective_taa_variance);
 
-	Q_snprintf(buffer, size, "%s\n%s\n%s\n%s",
-		line_dlss,
-		line_fg,
-		line_scale,
-		line_misc);
+	buffer[0] = 0;
+	append_overlay_line(buffer, size, line_dlss);
+	append_overlay_line(buffer, size, line_dll);
+	append_overlay_line(buffer, size, line_deepdvc);
+	append_overlay_line(buffer, size, line_fg);
+	append_overlay_line(buffer, size, line_reflex);
+	append_overlay_line(buffer, size, line_scale);
+	append_overlay_line(buffer, size, line_misc);
+	append_overlay_line(buffer, size, line_taa);
 
 	return true;
 }
@@ -4200,7 +4287,8 @@ R_RenderFrame_RTX(refdef_t *fd)
 			vkpt_taa(post_cmd_buf);
 
 		BEGIN_PERF_MARKER(post_cmd_buf, PROFILER_BLOOM);
-		if (cvar_bloom_enable->integer != 0 || qvk.frame_menu_mode)
+		if (cvar_bloom_enable->integer != 0 ||
+			(qvk.frame_menu_mode && vkpt_bloom_menu_effect_enabled()))
 		{
 			vkpt_bloom_record_cmd_buffer(post_cmd_buf);
 		}
@@ -4222,21 +4310,20 @@ R_RenderFrame_RTX(refdef_t *fd)
 
 		// Upscaling pass: DLSS SR takes priority over FSR EASU when enabled.
 		// FSR RCAS sharpening can still run on top of DLSS output.
-		if (!qvk.frame_menu_mode)
-		{
-			if (vkpt_dlss_rr_is_enabled())
-				vkpt_dlss_tag_mfg_output(post_cmd_buf,
-					qvk.images[VKPT_IMG_TAA_OUTPUT],
-					qvk.images_views[VKPT_IMG_TAA_OUTPUT],
-					VK_IMAGE_LAYOUT_GENERAL,
-					VK_FORMAT_R16G16B16A16_SFLOAT,
-					qvk.extent_taa_output.width,
-					qvk.extent_taa_output.height);
-			else if (vkpt_dlss_is_enabled())
-				vkpt_dlss_process(post_cmd_buf);
-			else if (vkpt_fsr_is_enabled())
-				vkpt_fsr_do(post_cmd_buf);
+		if (vkpt_dlss_rr_is_enabled() && !qvk.frame_menu_mode) {
+			vkpt_deepdvc_apply_taa_output(post_cmd_buf);
+			vkpt_dlss_tag_mfg_output(post_cmd_buf,
+				qvk.images[VKPT_IMG_TAA_OUTPUT],
+				qvk.images_views[VKPT_IMG_TAA_OUTPUT],
+				VK_IMAGE_LAYOUT_GENERAL,
+				VK_FORMAT_R16G16B16A16_SFLOAT,
+				qvk.extent_taa_output.width,
+				qvk.extent_taa_output.height);
 		}
+		else if (vkpt_dlss_is_enabled())
+			vkpt_dlss_process(post_cmd_buf);
+		else if (vkpt_fsr_is_enabled() && !qvk.frame_menu_mode)
+			vkpt_fsr_do(post_cmd_buf);
 
 		{
 			VkBufferCopy copyRegion = { 0, 0, sizeof(ReadbackBuffer) };
@@ -4568,6 +4655,18 @@ retry:;
 	SCR_SetHudAlpha(1.f);
 }
 
+static void
+vkpt_deepdvc_apply_taa_output(VkCommandBuffer cmd_buf)
+{
+	vkpt_deepdvc_apply(cmd_buf,
+		qvk.images[VKPT_IMG_TAA_OUTPUT],
+		qvk.images_views[VKPT_IMG_TAA_OUTPUT],
+		VK_IMAGE_LAYOUT_GENERAL,
+		VK_FORMAT_R16G16B16A16_SFLOAT,
+		qvk.extent_taa_images.width, qvk.extent_taa_images.height,
+		qvk.extent_taa_output.width, qvk.extent_taa_output.height);
+}
+
 void
 R_EndFrame_RTX(void)
 {
@@ -4607,7 +4706,7 @@ R_EndFrame_RTX(void)
 		{
 			vkpt_final_blit(cmd_buf, VKPT_IMG_TAA_OUTPUT, qvk.extent_taa_output, false, waterwarp);
 		}
-		else if (vkpt_dlss_is_enabled() && !qvk.frame_menu_mode)
+		else if (vkpt_dlss_is_enabled())
 		{
 			vkpt_dlss_final_blit(cmd_buf, waterwarp);
 		}
@@ -4617,6 +4716,7 @@ R_EndFrame_RTX(void)
 		}
 		else if (qvk.effective_aa_mode == AA_MODE_UPSCALE)
 		{
+			vkpt_deepdvc_apply_taa_output(cmd_buf);
 			vkpt_final_blit(cmd_buf, VKPT_IMG_TAA_OUTPUT, qvk.extent_taa_output, false, waterwarp);
 		}
 		else
@@ -4627,9 +4727,15 @@ R_EndFrame_RTX(void)
 
 			if (extents_equal(qvk.extent_render, qvk.extent_unscaled) ||
 				(extents_equal(qvk.extent_render, extent_unscaled_half) && drs_effective_scale == 0)) // don't do nearest filter 2x upscale with DRS enabled
+			{
+				vkpt_deepdvc_apply_taa_output(cmd_buf);
 				vkpt_final_blit(cmd_buf, VKPT_IMG_TAA_OUTPUT, qvk.extent_taa_output, false, waterwarp);
+			}
 			else
+			{
+				vkpt_deepdvc_apply_taa_output(cmd_buf);
 				vkpt_final_blit(cmd_buf, VKPT_IMG_TAA_OUTPUT, qvk.extent_taa_output, true, waterwarp);
+			}
 		}
 
 		frame_ready = false;

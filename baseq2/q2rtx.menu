@@ -105,6 +105,37 @@ begin hdr
     range -f "%.0f%%" "Saturation adjustment" tm_hdr_saturation_scale 0 200 5
 end
 
+begin dlss
+    background #212F3CD0
+    style --compact
+    title "NVIDIA DLSS"
+    toggle --live --status "NVIDIA DLSS 4 Super Resolution" "NVIDIA DLSS" flt_dlss_enable
+    range --live -f "%.0f fps" --status "Renderer FPS cap used before DLSS/Reflex/MFG pacing, 0 = disabled" "Max FPS" r_maxfps 0 1000 1
+    blank
+    pairs --live --status "DLSS quality mode (sets render resolution)" "DLSS mode" flt_dlss_mode "ultra performance" 1 "performance" 2 "balanced" 3 "quality" 4 "custom" 7 "DLAA" 6
+    range --live -f "%.0f%%" --status "Used by Custom mode: DLSS SR/RR render scale (33%%-99%% of output resolution)" "DLSS custom scale" flt_dlss_custom_ratio 33 99 1
+    pairs --live --status "DLSS SR preset: Recommended uses K for DLAA/Balanced/Quality, M for Performance, L for Ultra Performance" "DLSS preset" flt_dlss_preset "recommended" 0 "F (legacy)" 6 "J" 7 "K" 8 "L" 9 "M" 10
+    range --live --status "DLSS sharpening amount (0 = disabled, 1 = strongest)" "DLSS sharpness" flt_dlss_sharpness 0 1 0.01
+    toggle --live --status "Use DLSS automatic exposure instead of manual exposure scale" "DLSS auto-exposure" flt_dlss_auto_exposure
+    blank
+    toggle --live --status "RTX Dynamic Vibrance via Streamline DeepDVC. SDR only; applied after tone mapping before HUD" "RTX Dynamic Vibrance" flt_deepdvc
+    range --live -f "%.2f" --status "DeepDVC effect strength, 0 = original image, 1 = strongest adaptive vibrance" "DeepDVC intensity" flt_deepdvc_intensity 0 1 0.01
+    range --live -f "%.2f" --status "Extra saturation boost used by DeepDVC when intensity is above zero" "DeepDVC saturation" flt_deepdvc_saturation_boost 0 1 0.01
+    blank
+    toggle --live --status "Replaces TAA/TAAU with DLSS Ray Reconstruction when DLSS is enabled" "DLSS Ray Reconstruction" flt_dlss_rr
+    pairs --live --status "DLSS RR preset (D = default transformer, E = latest transformer)" "DLSS RR preset" flt_dlss_rr_preset "default" 0 "D" 4 "E" 5
+    blank
+    pairs --live --status "MFG multiplier for Fixed/Auto. With Dynamic/Variable, any non-off value only enables MFG and this multiplier is ignored" "DLSS MFG" flt_dlss_mfg "off" 0 "2X" 2 "3X" 3 "4X" 4 "5X" 5 "6X" 6
+    pairs --live --status "Fixed uses selected multiplier, Auto lets DLSS-G pace generation, Dynamic/Variable targets FPS and ignores the selected multiplier" "DLSS MFG policy" flt_dlss_mfg_policy "fixed" 0 "auto" 1 "dynamic" 2
+    pairs --live --status "Upper limit for Dynamic/Variable MFG. Auto uses the runtime cap; on Vulkan this also limits Streamline's Auto fallback" "DLSS MFG variable max" flt_dlss_mfg_dynamic_max "auto" 0 "2X" 2 "3X" 3 "4X" 4 "5X" 5 "6X" 6
+    range --live -f "%.0f fps" --status "Dynamic/Variable MFG target FPS, 0 = display refresh auto. If unsupported, Streamline falls back to Auto using the variable max" "DLSS MFG dynamic target" flt_dlss_mfg_dynamic_target_fps 0 480 1
+    pairs --live --status "Vulkan DLSS-G queue parallelism. Default is safest; Parallel uses Streamline eBlockNoClientQueues and waits on the DLSS-G input fence" "DLSS MFG queue mode" flt_dlss_mfg_queue_parallelism "default" 0 "parallel" 1
+    pairs --live --status "NVIDIA Reflex: reduces render-ahead for lower input latency (RTX GPU recommended)" "NVIDIA Reflex" flt_dlss_reflex "off" 0 "on" 1 "on + boost" 2
+    range --live -f "%.0f fps" --status "NVIDIA Reflex driver-aware FPS cap, 0 = disabled. This cap is independent from Reflex mode" "NVIDIA Reflex FPS cap" flt_dlss_reflex_fps_cap 0 480 1
+    blank
+    toggle --live --status "Show DLSS/RR/FG presets and loaded DLL versions in the top overlay" "DLSS debug overlay" r_debug_dlss_overlay
+end
+
 begin photomode
     background #212F3CD0
     style --compact
@@ -133,12 +164,14 @@ begin video
     pairs "full screen display" vid_display $vid_displaylist
     toggle "vertical sync" vid_vsync
     pairs "FPS counter" scr_fps "off" 0 "show FPS" 1 "show FPS and resolution scale" 2
+    range -p -f "%.0f%%" --status "Menu background opacity, 0 = fully transparent, 100%% = original menu opacity" "menu opacity" cl_menu_alpha 0 1 0.05
     range -f "%.0f deg" "field of view" fov 60 160 5
     blank
 
     ifeq vid_rtx 1
         action "resolution scaling options..." pushmenu resolution
         action "HDR options..." pushmenu hdr
+        action "NVIDIA DLSS..." pushmenu dlss
         blank
         range -f "%+.1f EV" "exposure bias (brightness)" tm_exposure_bias -5 0 0.1
         range -p -f "%.0f%%" "contrast" tm_reinhard 0 1 0.1
@@ -146,17 +179,6 @@ begin video
         pairs "anti-aliasing" flt_taa "none" 0 "temporal AA" 1 "temporal upscaling" 2
         toggle "AMD FSR 1.0" flt_fsr_enable
         range --status "lower is sharper" "AMD FSR 1.0 sharpness" flt_fsr_sharpness 0 2 0.01
-        toggle --status "NVIDIA DLSS 4" "NVIDIA DLSS" flt_dlss_enable
-        toggle --status "Replaces TAA/TAAU with DLSS Ray Reconstruction when DLSS is enabled" "DLSS Ray Reconstruction" flt_dlss_rr
-        pairs --status "DLSS RR preset (D = default transformer, E = latest transformer)" "DLSS RR preset" flt_dlss_rr_preset "default" 0 "D" 4 "E" 5
-        pairs --status "DLSS quality mode (sets render resolution)" "DLSS mode" flt_dlss_mode "ultra performance" 1 "performance" 2 "balanced" 3 "quality" 4 "custom" 7 "DLAA" 6
-        range -f "%.0f%%" --status "Used by Custom mode: DLSS SR/RR render scale (33%%-99%% of output resolution)" "DLSS custom scale" flt_dlss_custom_ratio 33 99 1
-        pairs --status "DLSS SR preset (D/E are deprecated in SR; K is the recommended transformer preset)" "DLSS preset" flt_dlss_preset "default" 0 "F" 6 "J" 7 "K (Transformer)" 8 "L (Transformer 2)" 9 "M (Transformer 2)" 10
-        range --status "DLSS sharpening amount (0 = disabled, 1 = strongest)" "DLSS sharpness" flt_dlss_sharpness 0 1 0.01
-        toggle --status "Use DLSS automatic exposure instead of manual exposure scale" "DLSS auto-exposure" flt_dlss_auto_exposure
-        toggle --status "Show DLSS/RR/FG presets and loaded DLL versions in the top overlay" "DLSS debug overlay" r_debug_dlss_overlay
-        pairs --status "Multi Frame Generation: requires RTX 40xx+ for 2X, RTX 50xx+ for 3X/4X" "DLSS MFG" flt_dlss_mfg "off" 0 "2X" 2 "3X" 3 "4X" 4
-        pairs --status "NVIDIA Reflex: reduces render-ahead for lower input latency (RTX GPU recommended)" "NVIDIA Reflex" flt_dlss_reflex "off" 0 "on" 1 "on + boost" 2
         pairs "global illumination" pt_num_bounce_rays low 0.5 medium 1 high 2
         pairs "reflection/refraction depth" pt_reflect_refract off 0 1 1 2 2 4 4 8 8
 		toggle --status "turn some monitors in the game into security camera views" \

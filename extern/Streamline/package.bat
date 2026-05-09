@@ -23,6 +23,11 @@ set include_binaries=True
 :: When packaging with source, the features dir is redundant with bin, but better reflects the original repo
 set create_features_dir=False
 
+set arch_vs=x64
+set arch_vs_ex=x86_64
+:: Currently only used for features/ subdir and x64/amd64 binaries aren't in a subdir...
+set arch_nvmake=
+
 :argloop
 IF NOT "%1"=="" (
     IF "%1"=="-debug" (
@@ -91,24 +96,24 @@ set copy_dest=%~2
 set sym_dest=%~3
 
 IF EXIST %src%/features (
-    set features_src=%src%\features\
+    set features_src=%src%\features\%arch_nvmake%
 ) ELSE (
-    set features_src=%src%\bin\x64
+    set features_src=%src%\bin\%arch_vs%
 )
 
 :: Common Plugins
-copy %artifacts_src%\sl.common\%copy_cfg%_x64\sl.common.dll %copy_dest% /Y
-copy %artifacts_src%\sl.common\%copy_cfg%_x64\sl.common.pdb %sym_dest% /Y
-copy %artifacts_src%\sl.interposer\%copy_cfg%_x64\sl.interposer.dll %copy_dest% /Y
-copy %artifacts_src%\sl.interposer\%copy_cfg%_x64\sl.interposer.pdb %sym_dest% /Y
+copy %artifacts_src%\sl.common\%copy_cfg%_%arch_vs%\sl.common.dll %copy_dest% /Y
+copy %artifacts_src%\sl.common\%copy_cfg%_%arch_vs%\sl.common.pdb %sym_dest% /Y
+copy %artifacts_src%\sl.interposer\%copy_cfg%_%arch_vs%\sl.interposer.dll %copy_dest% /Y
+copy %artifacts_src%\sl.interposer\%copy_cfg%_%arch_vs%\sl.interposer.pdb %sym_dest% /Y
 IF NOT "%copy_cfg%"=="Production" (
-    copy %artifacts_src%\sl.imgui\%copy_cfg%_x64\sl.imgui.dll %copy_dest% /Y
-    copy %artifacts_src%\sl.imgui\%copy_cfg%_x64\sl.imgui.pdb %sym_dest% /Y
+    copy %artifacts_src%\sl.imgui\%copy_cfg%_%arch_vs%\sl.imgui.dll %copy_dest% /Y
+    copy %artifacts_src%\sl.imgui\%copy_cfg%_%arch_vs%\sl.imgui.pdb %sym_dest% /Y
 )
 
 :: DLSS Super Resolution
-copy %artifacts_src%\sl.dlss\%copy_cfg%_x64\sl.dlss.dll %copy_dest% /Y
-copy %artifacts_src%\sl.dlss\%copy_cfg%_x64\sl.dlss.pdb %sym_dest% /Y
+copy %artifacts_src%\sl.dlss\%copy_cfg%_%arch_vs%\sl.dlss.dll %copy_dest% /Y
+copy %artifacts_src%\sl.dlss\%copy_cfg%_%arch_vs%\sl.dlss.pdb %sym_dest% /Y
 
 copy %features_src%\nvngx_dlss.license.txt %copy_dest% /Y
 
@@ -121,10 +126,10 @@ IF "%copy_cfg%"=="Production" (
 :: DLSS Frame Generation
 IF "%copy_cfg%"=="Production" (
     copy %features_src%\sl.dlss_g.dll %copy_dest% /Y
-    copy %artifacts_src%\sl.dlss_g\%copy_cfg%_x64\sl.dlss_g.dll %copy_dest% /Y
+    copy %artifacts_src%\sl.dlss_g\%copy_cfg%_%arch_vs%\sl.dlss_g.dll %copy_dest% /Y
 ) ELSE (
     copy %features_src%\development\sl.dlss_g.dll %copy_dest% /Y
-    copy %artifacts_src%\sl.dlss_g\Develop_x64\sl.dlss_g.dll %copy_dest% /Y
+    copy %artifacts_src%\sl.dlss_g\Develop_%arch_vs%\sl.dlss_g.dll %copy_dest% /Y
 )
 
 IF "%copy_cfg%"=="Production" (
@@ -134,8 +139,8 @@ IF "%copy_cfg%"=="Production" (
 )
 
 :: DLSS Ray Reconstruction
-copy %artifacts_src%\sl.dlss_d\%copy_cfg%_x64\sl.dlss_d.dll %copy_dest% /Y
-copy %artifacts_src%\sl.dlss_d\%copy_cfg%_x64\sl.dlss_d.pdb %sym_dest% /Y
+copy %artifacts_src%\sl.dlss_d\%copy_cfg%_%arch_vs%\sl.dlss_d.dll %copy_dest% /Y
+copy %artifacts_src%\sl.dlss_d\%copy_cfg%_%arch_vs%\sl.dlss_d.pdb %sym_dest% /Y
 
 IF "%copy_cfg%"=="Production" (
     copy %features_src%\nvngx_dlssd.dll %copy_dest% /Y
@@ -144,8 +149,8 @@ IF "%copy_cfg%"=="Production" (
 )
 
 :: DeepDVC
-copy %artifacts_src%\sl.deepdvc\%copy_cfg%_x64\sl.deepdvc.dll %copy_dest% /Y
-copy %artifacts_src%\sl.deepdvc\%copy_cfg%_x64\sl.deepdvc.pdb %sym_dest% /Y
+copy %artifacts_src%\sl.deepdvc\%copy_cfg%_%arch_vs%\sl.deepdvc.dll %copy_dest% /Y
+copy %artifacts_src%\sl.deepdvc\%copy_cfg%_%arch_vs%\sl.deepdvc.pdb %sym_dest% /Y
 
 IF "%copy_cfg%"=="Production" (
     copy %features_src%\nvngx_deepdvc.dll %copy_dest% /Y
@@ -156,26 +161,26 @@ IF "%copy_cfg%"=="Production" (
 
 
 :: NIS
-copy %artifacts_src%\sl.nis\%copy_cfg%_x64\sl.nis.dll %copy_dest% /Y
-copy %artifacts_src%\sl.nis\%copy_cfg%_x64\sl.nis.pdb %sym_dest% /Y
+copy %artifacts_src%\sl.nis\%copy_cfg%_%arch_vs%\sl.nis.dll %copy_dest% /Y
+copy %artifacts_src%\sl.nis\%copy_cfg%_%arch_vs%\sl.nis.pdb %sym_dest% /Y
 
 copy %features_src%\nis.license.txt %copy_dest% /Y
 
 :: NvPerf
-copy %artifacts_src%\sl.nvperf\%copy_cfg%_x64\sl.nvperf.dll %copy_dest% /Y
-copy %artifacts_src%\sl.nvperf\%copy_cfg%_x64\sl.nvperf.pdb %sym_dest% /Y
+copy %artifacts_src%\sl.nvperf\%copy_cfg%_%arch_vs%\sl.nvperf.dll %copy_dest% /Y
+copy %artifacts_src%\sl.nvperf\%copy_cfg%_%arch_vs%\sl.nvperf.pdb %sym_dest% /Y
 
 :: PCL
-copy %artifacts_src%\sl.pcl\%copy_cfg%_x64\sl.pcl.dll %copy_dest% /Y
-copy %artifacts_src%\sl.pcl\%copy_cfg%_x64\sl.pcl.pdb %sym_dest% /Y
+copy %artifacts_src%\sl.pcl\%copy_cfg%_%arch_vs%\sl.pcl.dll %copy_dest% /Y
+copy %artifacts_src%\sl.pcl\%copy_cfg%_%arch_vs%\sl.pcl.pdb %sym_dest% /Y
 
 :: DirectSR
-copy %artifacts_src%\sl.directsr\%copy_cfg%_x64\sl.directsr.dll %copy_dest% /Y
-copy %artifacts_src%\sl.directsr\%copy_cfg%_x64\sl.directsr.pdb %sym_dest% /Y
+copy %artifacts_src%\sl.directsr\%copy_cfg%_%arch_vs%\sl.directsr.dll %copy_dest% /Y
+copy %artifacts_src%\sl.directsr\%copy_cfg%_%arch_vs%\sl.directsr.pdb %sym_dest% /Y
 
 :: Reflex
-copy %artifacts_src%\sl.reflex\%copy_cfg%_x64\sl.reflex.dll %copy_dest% /Y
-copy %artifacts_src%\sl.reflex\%copy_cfg%_x64\sl.reflex.pdb %sym_dest% /Y
+copy %artifacts_src%\sl.reflex\%copy_cfg%_%arch_vs%\sl.reflex.dll %copy_dest% /Y
+copy %artifacts_src%\sl.reflex\%copy_cfg%_%arch_vs%\sl.reflex.pdb %sym_dest% /Y
 
 copy %features_src%\reflex.license.txt %copy_dest% /Y
 
@@ -184,6 +189,7 @@ copy %src%\external\reflex-sdk-vk\lib\NvLowLatencyVk.dll %copy_dest% /Y
 :: Profiling Binary
 IF "%copy_cfg%"=="Develop" (
     copy %src%\external\pix\bin\WinPixEventRuntime.dll %copy_dest% /Y
+    copy %src%\external\pix\PACKAGE_LICENSES\winpixeventruntime-LICENSE.md %copy_dest% /Y
 )
 
 exit /b 0
@@ -191,21 +197,21 @@ exit /b 0
 
 
 IF "%include_binaries%"=="True" (
-    mkdir %dest%\lib\x64
-    mkdir %dest%\bin\x64
+    mkdir %dest%\lib\%arch_vs%
+    mkdir %dest%\bin\%arch_vs%
     mkdir %dest%\symbols
 
     IF "%cfg_alt%"=="None" (
-        call:copybin %cfg% %dest%\bin\x64 %dest%\symbols
+        call:copybin %cfg% %dest%\bin\%arch_vs% %dest%\symbols
     ) ELSE (
-        mkdir %dest%\bin\x64\development
+        mkdir %dest%\bin\%arch_vs%\development
 
-        call:copybin %cfg% %dest%\bin\x64 NUL
-        call:copybin %cfg_alt% %dest%\bin\x64\development %dest%\symbols
+        call:copybin %cfg% %dest%\bin\%arch_vs% NUL
+        call:copybin %cfg_alt% %dest%\bin\%arch_vs%\development %dest%\symbols
     )
 
     :: Interposer lib
-    copy %artifacts_src%\sl.interposer\%cfg%_x64\sl.interposer.lib %dest%\lib\x64\ /Y
+    copy %artifacts_src%\sl.interposer\%cfg%_%arch_vs%\sl.interposer.lib %dest%\lib\%arch_vs%\ /Y
 )
 
 :: INCLUDES
@@ -292,8 +298,12 @@ copy %src%\docs\media\Validation.png %dest%\docs\media
 
 copy %src%\docs\Streamline*.pdf %dest%\docs
 
+copy "%src%\docs\DLSS-FG Programming Guide.pdf" %dest%\docs
 copy "%src%\docs\DLSS-RR Integration Guide.pdf" %dest%\docs
 copy "%src%\docs\DLSS Programming Guide.pdf" %dest%\docs
+
+:: Changelog
+copy %src%\docs\changelog.txt %dest% /Y
 
 :: README AND LICENSES
 copy %src%\README.md             %dest% /Y
@@ -365,6 +375,10 @@ IF "%include_source%"=="True" (
     mkdir %dest%\source\plugins\sl.template
     xcopy %src%\source\plugins\sl.template %dest%\source\plugins\sl.template /S
 
+    :: Git metadata files
+    copy %src%\.gitignore %dest%\.gitignore
+    copy %src%\.gitattributes %dest%\
+
     :: External Dependencies
     mkdir %dest%\external
     mkdir %dest%\external\json
@@ -372,7 +386,7 @@ IF "%include_source%"=="True" (
     mkdir %dest%\external\ngx-sdk
     mkdir %dest%\external\ngx-sdk\include
     mkdir %dest%\external\ngx-sdk\lib
-    mkdir %dest%\external\ngx-sdk\lib\Windows_x86_64
+    mkdir %dest%\external\ngx-sdk\lib\Windows_%arch_vs_ex%
 
     xcopy %src%\external\json\include                          %dest%\external\json\include /S
     copy %src%\external\json\LICENSE.MIT                       %dest%\external\json
@@ -391,10 +405,14 @@ IF "%include_source%"=="True" (
     copy %src%\external\ngx-sdk\include\nvsdk_ngx_helpers_deepdvc.h    %dest%\external\ngx-sdk\include
     copy %src%\external\ngx-sdk\include\nvsdk_ngx_helpers_deepdvc_vk.h %dest%\external\ngx-sdk\include
 
-    xcopy %src%\external\ngx-sdk\lib\Windows_x86_64                    %dest%\external\ngx-sdk\lib\Windows_x86_64 /S
+    xcopy %src%\external\ngx-sdk\lib\Windows_%arch_vs_ex%                    %dest%\external\ngx-sdk\lib\Windows_%arch_vs_ex% /S
+
+    :: Copy RTX SDKs EULA for NGX SDK bits
+    copy %src%\features\nvngx_dlss.license.txt %dest%\external\ngx-sdk\license.txt
 
     mkdir %dest%\external\reflex-sdk-vk
     xcopy %src%\external\reflex-sdk-vk\ %dest%\external\reflex-sdk-vk /S
+    copy %src%\features\reflex.license.txt %dest%\external\reflex-sdk-vk /Y
 
     :: Shader Source
     copy %src%\shaders\copy.hlsl                       %dest%\shaders
@@ -439,10 +457,10 @@ IF "%include_source%"=="True" (
     :: DLSS-G Plugin
     IF "%include_binaries%"=="True" (
         mkdir %dest%\_artifacts\sl.dlss_g
-        mkdir %dest%\_artifacts\sl.dlss_g\Production_x64
-        mkdir %dest%\_artifacts\sl.dlss_g\Develop_x64
-        copy %artifacts_src%\sl.dlss_g\Production_x64\sl.dlss_g.dll %dest%\_artifacts\sl.dlss_g\Production_x64
-        copy %artifacts_src%\sl.dlss_g\Develop_x64\sl.dlss_g.dll %dest%\_artifacts\sl.dlss_g\Develop_x64
+        mkdir %dest%\_artifacts\sl.dlss_g\Production_%arch_vs%
+        mkdir %dest%\_artifacts\sl.dlss_g\Develop_%arch_vs%
+        copy %artifacts_src%\sl.dlss_g\Production_%arch_vs%\sl.dlss_g.dll %dest%\_artifacts\sl.dlss_g\Production_%arch_vs%
+        copy %artifacts_src%\sl.dlss_g\Develop_%arch_vs%\sl.dlss_g.dll %dest%\_artifacts\sl.dlss_g\Develop_%arch_vs%
     )
 
 )

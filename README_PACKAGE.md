@@ -1,11 +1,19 @@
 # Q2RTX-1.8.1-GPT Source Package
 
-This folder is prepared for publishing the current working source tree to GitHub.
+This folder is prepared for publishing the current Q2RTX DLSS Public Beta 0.9 source tree to GitHub.
+
+Release line:
+- Public Beta 0.9
+- NVIDIA Streamline 2.11.1
+- DLSS 4.5
+- Based on Q2RTX 1.8.1
 
 Included:
 - Current source tree exported from `Q2RTX-src`
 - Local project notes copied into `project-notes/`
 - Source-side Streamline integration files and required checked-in content
+- Updated DLSS submenu definition from `baseq2/q2rtx.menu`
+- Streamline 2.11.1 status notes in `project-notes/STREAMLINE_2_11_1_STATUS.md`
 
 Excluded on purpose:
 - Git metadata directories such as `.git/`
@@ -17,3 +25,4 @@ Notes:
 - If Streamline dependency folders are missing after cloning on another machine, run `extern/Streamline/setup.bat` to restore the SDK-side external dependencies.
 - Build notes from this workspace are stored in `project-notes/`.
 - Game `.pak` files are not part of the source package and must not be redistributed.
+- Local publishing helper for this workspace: `O:\Claude2\Q2RTX-1.8.1-GPT\github\publish_q2rtx_dlss_0_9_to_github.bat`.

@@ -28,8 +28,16 @@ LIST_DECL(ui_menus);
 cvar_t    *ui_debug;
 static cvar_t    *ui_open;
 static cvar_t    *ui_scale;
+static cvar_t    *cl_menu_alpha;
+static bool       ui_mouse_input_active;
 
 // ===========================================================================
+
+static bool UI_IsMouseKey(int key)
+{
+    return key == K_MOUSE1 || key == K_MOUSE2 || key == K_MOUSE3 ||
+           key == K_MWHEELUP || key == K_MWHEELDOWN;
+}
 
 /*
 =================
@@ -88,7 +96,9 @@ void UI_PushMenu(menuFrameWork_t *menu)
 
     uis.activeMenu = menu;
 
-    UI_DoHitTest();
+    if (ui_mouse_input_active) {
+        UI_DoHitTest();
+    }
 
     if (menu->expose) {
         menu->expose(menu);
@@ -165,7 +175,9 @@ void UI_PopMenu(void)
     uis.activeMenu = uis.layers[uis.menuDepth - 1];
     uis.mouseTracker = NULL;
 
-    UI_DoHitTest();
+    if (ui_mouse_input_active) {
+        UI_DoHitTest();
+    }
 }
 
 /*
@@ -180,6 +192,14 @@ bool UI_IsTransparent(void)
     }
 
     if (!uis.activeMenu) {
+        return true;
+    }
+
+    if (!cl_menu_alpha) {
+        cl_menu_alpha = Cvar_Get("cl_menu_alpha", "1.0", CVAR_ARCHIVE);
+    }
+
+    if (cl_menu_alpha->value < 1.0f) {
         return true;
     }
 
@@ -211,6 +231,8 @@ void UI_OpenMenu(uiMenu_t type)
     if (!uis.initialized) {
         return;
     }
+
+    ui_mouse_input_active = false;
 
     // close any existing menus
     UI_ForceMenuOff();
@@ -401,6 +423,8 @@ UI_MouseEvent
 */
 void UI_MouseEvent(int x, int y)
 {
+    ui_mouse_input_active = true;
+
     x = Q_clip(x, 0, r_config.width - 1);
     y = Q_clip(y, 0, r_config.height - 1);
 
@@ -512,6 +536,8 @@ void UI_KeyEvent(int key, bool down)
         }
         return;
     }
+
+    ui_mouse_input_active = UI_IsMouseKey(key);
 
     sound = Menu_Keydown(uis.activeMenu, key);
 

@@ -2,11 +2,13 @@
  * NVIDIA DLSS 4 integration for Q2RTX
  *
  * Requires at runtime (place next to q2rtx.exe):
- *   sl.interposer.dll, sl.common.dll, sl.dlss.dll, sl.dlss_g.dll, sl.dlss_d.dll
- *   nvngx_dlss.dll, nvngx_dlssg.dll, nvngx_dlssd.dll
+ *   sl.interposer.dll, sl.common.dll, sl.dlss.dll, sl.dlss_g.dll, sl.dlss_d.dll,
+ *   sl.deepdvc.dll, nvngx_dlss.dll, nvngx_dlssg.dll, nvngx_dlssd.dll,
+ *   nvngx_deepdvc.dll
  *
  * DLSS Super Resolution replaces FSR EASU upscaling.
- * DLSS Frame Generation (MFG) adds frame interpolation (2X/3X/4X).
+ * DLSS Frame Generation (MFG) adds frame interpolation (2X/3X/4X/5X/6X).
+ * DeepDVC adds RTX Dynamic Vibrance after SDR tone mapping.
  * When DLSS is enabled, FSR EASU is bypassed. FSR RCAS sharpening
  * can optionally still run on the DLSS output.
  */
@@ -35,7 +37,16 @@ typedef enum {
     DLSS_MFG_2X  = 2,   /* RTX 40xx+ */
     DLSS_MFG_3X  = 3,   /* RTX 50xx+ */
     DLSS_MFG_4X  = 4,   /* RTX 50xx+ */
+    DLSS_MFG_5X  = 5,   /* RTX 50xx+ with Streamline 2.11.1+ */
+    DLSS_MFG_6X  = 6,   /* RTX 50xx+ with Streamline 2.11.1+ */
 } DlssMfgMode_t;
+
+typedef enum {
+    DLSS_MFG_POLICY_FIXED   = 0,
+    DLSS_MFG_POLICY_AUTO    = 1,
+    DLSS_MFG_POLICY_DYNAMIC = 2,
+    DLSS_MFG_POLICY_COUNT
+} DlssMfgPolicy_t;
 
 typedef struct DlssReflexDebugReport_s {
     uint64_t frame_id;
@@ -52,7 +63,7 @@ typedef struct DlssReflexDebugReport_s {
 
 /* ---- DLSS model preset ---- */
 typedef enum {
-    DLSS_PRESET_DEFAULT = 0, /* Let DLSS choose */
+    DLSS_PRESET_DEFAULT = 0, /* Recommended DLSS 4 preset for the current mode */
     DLSS_PRESET_A,
     DLSS_PRESET_B,
     DLSS_PRESET_C,
@@ -119,7 +130,8 @@ bool vkpt_dlss_g_is_available(void); /* GPU supports DLSS-G */
 int  vkpt_dlss_get_display_fps(void);        /* display FPS measured on present thread */
 int  vkpt_dlss_get_display_multiplier(void); /* frames actually presented per render frame */
 uint64_t vkpt_dlss_get_total_presented_frames(void);
-int  vkpt_dlss_get_mfg_cap(void);            /* 0=unsupported, 2=2X only, 4=2X/3X/4X */
+int  vkpt_dlss_get_mfg_cap(void);            /* 0=unsupported, 2..6=max display multiplier */
+int  vkpt_dlss_get_mfg_dynamic_supported(void);
 int  vkpt_dlss_get_requested_reflex_mode(void);
 int  vkpt_dlss_get_effective_reflex_mode(void);
 int  vkpt_dlss_get_last_dlssg_status(void);
@@ -146,10 +158,17 @@ float         vkpt_dlss_get_custom_ratio(void);
 DlssPreset_t  vkpt_dlss_get_preset(void);
 DlssPreset_t  vkpt_dlss_get_rr_preset(void);
 DlssMfgMode_t vkpt_dlss_get_mfg_mode(void);
+DlssMfgPolicy_t vkpt_dlss_get_mfg_policy(void);
+DlssMfgPolicy_t vkpt_dlss_get_effective_mfg_policy(void);
+DlssMfgMode_t vkpt_dlss_get_mfg_dynamic_max(void);
+float         vkpt_dlss_get_mfg_dynamic_target_fps(void);
 int           vkpt_dlss_get_mfg_render_cap(void);
+int           vkpt_dlss_get_mfg_queue_parallelism(void);
+int           vkpt_dlss_get_reflex_fps_cap(void);
 const char*   vkpt_dlss_get_sr_dll_version(void);
 const char*   vkpt_dlss_get_rr_dll_version(void);
 const char*   vkpt_dlss_get_fg_dll_version(void);
+const char*   vkpt_deepdvc_get_dll_version(void);
 
 bool         vkpt_dlss_is_sl_debug_log_enabled(void);
 
@@ -188,6 +207,19 @@ void vkpt_dlss_tag_mfg_output(VkCommandBuffer cmd_buf,
     uint32_t display_w, uint32_t display_h);
 void vkpt_dlss_force_mfg_off_for_menu(void);
 VkImageView vkpt_dlss_get_output_view(void);
+
+/* RTX Dynamic Vibrance / Streamline DeepDVC.
+ * Applies to post-tonemap SDR final-resolution color before final blit/HUD. */
+bool vkpt_deepdvc_is_available(void);
+bool vkpt_deepdvc_is_enabled(void);
+float vkpt_deepdvc_get_intensity(void);
+float vkpt_deepdvc_get_saturation_boost(void);
+uint64_t vkpt_deepdvc_get_estimated_vram(void);
+void vkpt_deepdvc_apply(VkCommandBuffer cmd_buf,
+    VkImage color_img, VkImageView color_view,
+    uint32_t layout_color, uint32_t fmt_color,
+    uint32_t resource_w, uint32_t resource_h,
+    uint32_t valid_w, uint32_t valid_h);
 
 /*
  * Blit DLSS_OUTPUT to the swapchain image (replaces vkpt_fsr_final_blit).

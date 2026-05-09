@@ -1,12 +1,14 @@
-# Streamline (SL) - Version 2.8.0
+# Streamline (SL) - Version 2.11.1
 
 Streamline is an open-sourced cross-IHV solution that simplifies integration of the latest NVIDIA and other independent hardware vendors' super resolution technologies into applications and games. This framework allows developers to easily implement one single integration and enable multiple super-resolution technologies and other graphics effects supported by the hardware vendor.
 
-This repo contains the SDK for integrating Streamline into your application.
+This repo contains the SDK for integrating Streamline into your application.  This project is currently not accepting contributions.
 
 For a high level overview, see the [NVIDIA Developer Streamline page](https://developer.nvidia.com/rtx/streamline)
 
 As of SL 2.0.0, it is now possible to recompile all of SL from source, with the exception of the DLSS-G plugin.  The DLSS-G plugin is provided as prebuilt DLLs only.  We also provide prebuilt DLLs (signed) for all other plugins that have source.  Most application developers will never need to rebuild SL themselves, especially for shipping; all of the pieces needed to develop, debug and ship an application that integrates SL and its features are provided in the pre-existing directories `bin/`, `include/`, and `lib/`.  Compiling from source is purely optional and likely of interest to a subset of SL application developers. For developers wishing to build SL from source, see the following sections.
+
+As of SL 2.7.32, binary artifacts (DLSS feature DLLs and Streamline DLLs) are not in the GitHub repository. In order to obtain these artifacts, please download the appropriate release zip from the [GitHub releases page](https://github.com/NVIDIA-RTX/Streamline/releases).
 
 ------
 
@@ -20,8 +22,7 @@ As of SL 2.0.0, it is now possible to recompile all of SL from source, with the 
 
 - Win10 20H1 (version 2004 - 10.0.19041) or newer
 - Install latest graphics driver (**if using NVIDIA GPU it MUST be 512.15 or newer**)
-- Install VS Code or VS2017/VS2019/VS2022 with [SDK 10.0.19041+](https://go.microsoft.com/fwlink/?linkid=2120843)
-    - NOTE: VS2017 support is deprecated and will be removed in SL 2.9
+- Install VS Code or VS2019+ with [SDK 10.0.19041+](https://go.microsoft.com/fwlink/?linkid=2120843)
 - Install "git".
 - Clone your fork to a local hard drive, make sure to use a NTFS drive on Windows (SL uses symbolic links)
 
@@ -42,9 +43,9 @@ To configure a new SL tree to build, there is a script called `setup.bat`.  Note
 Running the `setup.bat` script will cause two things to be done:
 
 1. Use the NVIDIA tool `packman` to pull all build dependencies to the local machine and cache them in a shared directory.  Links are created from `external` in the SL tree to this shared cache for external build dependencies.
-2. Run `premake` to generate the project build files in `_project\vs2017` (for Windows)
+2. Run `premake` to generate the project build files in `_project\vs2019` (for Windows)
 
-To build the project, simply open `_project\vs2017\streamline.sln` in Visual Studio, select the desired build configuration and build, or else use the provided build script:
+To build the project, simply open `_project\vs2019\streamline.sln` in Visual Studio, select the desired build configuration and build, or else use the provided build script:
 
 `./build.bat` with `-{debug|develop|production}` (`debug` is default) or use VS IDE and load solution from the `_project` directory
 

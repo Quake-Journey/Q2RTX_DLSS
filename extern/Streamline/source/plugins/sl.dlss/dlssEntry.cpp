@@ -370,7 +370,13 @@ Result dlssBeginEvent(chi::CommandList pCmdList, const common::EventData& data, 
             {
                 SL_LOG_INFO("Detected resize, recreating DLSSContext feature");
                 // Errors logged by sl.common
-                ctx.ngxContext->releaseFeature(viewport.handle, "sl.dlss");
+
+                // Delayed releaseFeature call by 3 frames to avoid race conditions
+                auto releaseFeatureLambda = [&ctx, handle = viewport.handle](void) -> void {
+                    ctx.ngxContext->releaseFeature(handle, "sl.dlss");
+                };
+                CHI_VALIDATE(ctx.compute->destroy(releaseFeatureLambda, 3));
+
                 viewport.handle = {};
                 ctx.compute->destroyResource(viewport.mvec);
                 viewport.mvec = nullptr;
@@ -476,6 +482,10 @@ Result dlssBeginEvent(chi::CommandList pCmdList, const common::EventData& data, 
                     SL_LOG_INFO("DLSSContext color_out extents (%u,%u,%u,%u)", colorOutExt.left, colorOutExt.top, colorOutExt.width, colorOutExt.height);
                     SL_LOG_INFO("DLSSContext depth extents (%u,%u,%u,%u)", depthExt.left, depthExt.top, depthExt.width, depthExt.height);
                     SL_LOG_INFO("DLSSContext mvec extents (%u,%u,%u,%u)", mvecExt.left, mvecExt.top, mvecExt.width, mvecExt.height);
+                }
+                else
+                {
+                    return Result::eErrorNGXFailed;
                 }
             }
         }
@@ -863,6 +873,11 @@ Result slGetData(const BaseStructure *inputs, BaseStructure *output, CommandBuff
         ctx.ngxContext->params->Get(NVSDK_NGX_Parameter_DLSS_Get_Dynamic_Max_Render_Height, &settings->renderHeightMax);
         ctx.ngxContext->params->Get(NVSDK_NGX_Parameter_DLSS_Get_Dynamic_Min_Render_Width, &settings->renderWidthMin);
         ctx.ngxContext->params->Get(NVSDK_NGX_Parameter_DLSS_Get_Dynamic_Min_Render_Height, &settings->renderHeightMin);
+        if (settings->optimalRenderWidth == 0 || settings->optimalRenderHeight == 0)
+        {
+            SL_LOG_WARN("DLSSContext 'getOptimalSettings' returns invalid size (%d x %d), due to unsupported mode or output size", settings->optimalRenderWidth, settings->optimalRenderHeight);
+            return Result::eErrorInvalidParameter;
+        }
     }
     
     // Stats

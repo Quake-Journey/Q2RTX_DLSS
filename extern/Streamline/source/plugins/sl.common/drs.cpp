@@ -98,7 +98,7 @@ namespace drs
     }
 
     template<typename T>
-    bool drsReadKeyImpl(NvU32 keyId, T& value, bool useAppProfile)
+    bool drsReadKeyImpl(NvU32 keyId, T& value, bool useAppProfile, bool useGlobalProfile)
     {
 #ifdef NV_WINDOWS
         std::unique_lock<std::mutex> lock(g_mutex);
@@ -120,10 +120,14 @@ namespace drs
         {
             return false;
         }
-        NVDRS_SETTING profileSetting;
+        NVDRS_SETTING profileSetting = { 0 };
         profileSetting.version = NVDRS_SETTING_VER;
         auto status = NvAPI_DRS_GetSetting(g_hDRSSession, hProfile, keyId, &profileSetting);
         if (status != NVAPI_OK)
+        {
+            return false;
+        }
+        if (!useGlobalProfile && profileSetting.settingLocation != NVDRS_CURRENT_PROFILE_LOCATION)
         {
             return false;
         }
@@ -145,24 +149,36 @@ namespace drs
     bool drsReadKey(NvU32 keyId, NvU32& value)
     {
         const bool useAppProfile = false;
-        return drsReadKeyImpl(keyId, value, useAppProfile);
+        return drsReadKeyImpl(keyId, value, useAppProfile, true);
     }
 
     bool drsReadKeyFromProfile(NvU32 keyId, NvU32& value)
     {
         const bool useAppProfile = true;
-        return drsReadKeyImpl(keyId, value, useAppProfile);
+        return drsReadKeyImpl(keyId, value, useAppProfile, true);
     }
 
     bool drsReadKeyString(NvU32 keyId, std::wstring& value)
     {
         const bool useAppProfile = false;
-        return drsReadKeyImpl(keyId, value, useAppProfile);
+        return drsReadKeyImpl(keyId, value, useAppProfile, true);
     }
 
     bool drsReadKeyStringFromProfile(NvU32 keyId, std::wstring& value)
     {
         const bool useAppProfile = true;
-        return drsReadKeyImpl(keyId, value, useAppProfile);
+        return drsReadKeyImpl(keyId, value, useAppProfile, true);
+    }
+
+    bool drsReadKeyFromProfileNoGlobal(NvU32 keyId, NvU32& uValue)
+    {
+        const bool useAppProfile = true;
+        return drsReadKeyImpl(keyId, uValue, useAppProfile, false);
+    }
+
+    bool drsReadKeyStringFromProfileNoGlobal(NvU32 keyId, std::wstring& sValue)
+    {
+        const bool useAppProfile = true;
+        return drsReadKeyImpl(keyId, sValue, useAppProfile, false);
     }
 }

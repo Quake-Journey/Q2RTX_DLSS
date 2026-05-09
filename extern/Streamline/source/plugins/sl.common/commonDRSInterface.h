@@ -39,6 +39,8 @@ using PFunDRSReadKeyString = bool(NvU32 keyId, std::wstring& sValue);
 using PFunDRSReadKey = bool(NvU32 keyId, NvU32& uValue);
 using PFunDRSReadKeyFromProfile = bool(NvU32 keyId, NvU32& uValue);
 using PFunDRSReadKeyStringFromProfile = bool(NvU32 keyId, std::wstring& sValue);
+using PFunDRSReadKeyFromProfileNoGlobal = bool(NvU32 keyId, NvU32& uValue);
+using PFunDRSReadKeyStringFromProfileNoGlobal = bool(NvU32 keyId, std::wstring& sValue);
 
 struct DRSContext
 {
@@ -46,6 +48,8 @@ struct DRSContext
     PFunDRSReadKeyFromProfile* drsReadKeyFromProfile{};
     PFunDRSReadKeyString* drsReadKeyString{};
     PFunDRSReadKeyStringFromProfile* drsReadKeyStringFromProfile{};
+    PFunDRSReadKeyFromProfileNoGlobal* drsReadKeyFromProfileNoGlobal{};
+    PFunDRSReadKeyStringFromProfileNoGlobal* drsReadKeyStringFromProfileNoGlobal{};
 };
 
 } // namespace common

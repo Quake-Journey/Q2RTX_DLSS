@@ -2,10 +2,6 @@
 set cfg=
 :loop
 IF NOT "%1"=="" (
-    IF "%1"=="vs2017" (
-        echo WARNING vs2017 is deprecated and will be removed in SL 2.9
-        SET cfg=vs2017
-    )
     IF "%1"=="vs2019" (
         SET cfg=vs2019
     )
@@ -22,7 +18,7 @@ IF "%cfg%"=="" (
     ) ELSE IF exist .\_project\vs2019\streamline.sln (
         SET cfg=vs2019
     ) ELSE (
-        SET cfg=vs2017
+        exit /b 1
     )
 )
 
