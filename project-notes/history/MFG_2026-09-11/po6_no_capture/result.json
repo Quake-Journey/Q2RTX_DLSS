@@ -1,0 +1,56 @@
+{
+  "args": {
+    "name": "po6_no_capture",
+    "mode": 6,
+    "cap": 300,
+    "queue": 0,
+    "seconds": 12,
+    "softcap": 0,
+    "renderfps": 1000,
+    "controls": false,
+    "capture": "",
+    "ring": 0,
+    "rr": 1,
+    "shader": null,
+    "vsync": 0,
+    "dlssmode": 7,
+    "mouse": false,
+    "presentmon": false,
+    "noimages": true,
+    "policy": 1
+  },
+  "pid": 57868,
+  "exit": 0,
+  "collector_exit": 0,
+  "qpc_frequency": 10000000,
+  "events": [
+    {
+      "marker": "PACING_BEGIN",
+      "qpc": 621857530665
+    },
+    {
+      "marker": "PACING_END",
+      "qpc": 622012250742
+    }
+  ],
+  "foreground": [
+    {
+      "qpc": 621724252098,
+      "foreground": false
+    },
+    {
+      "qpc": 621766784329,
+      "foreground": true
+    },
+    {
+      "qpc": 622011618807,
+      "foreground": false
+    }
+  ],
+  "focus_attempts": [],
+  "silent": true,
+  "done": true,
+  "new_crashes": [],
+  "configs_unchanged": true,
+  "exe_sha256": "013eb548ac83dcbf052aedb6247102d0f34c85d7228d081c3994af7c3959d0f0"
+}

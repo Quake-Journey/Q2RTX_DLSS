@@ -2,9 +2,9 @@
 
 [![Build Status](https://github.com/Quake-Journey/Q2RTX_DLSS/actions/workflows/build.yml/badge.svg)](https://github.com/Quake-Journey/Q2RTX_DLSS/actions/workflows/build.yml)
 
-Public Beta 0.9
+Public Beta 0.95
 
-Streamline 2.11.1 / DLSS 4.5
+Streamline 2.14.1 / DLSS 310.9.1
 
 Based on Q2RTX 1.8.1
 
@@ -14,7 +14,7 @@ It is a self-contained Quake II RTX source tree focused on integrating modern NV
 
 ## Purpose
 
-This public beta branch is intended for testing the integration of NVIDIA Streamline 2.11.1, DLSS Super Resolution, DLSS Ray Reconstruction, DLSS Multi Frame Generation, NVIDIA Reflex, and RTX Dynamic Vibrance / DeepDVC in Q2RTX.
+This public beta branch is intended for testing the integration of NVIDIA Streamline 2.14.1, DLSS Super Resolution, DLSS Ray Reconstruction, DLSS Multi Frame Generation, NVIDIA Reflex, and RTX Dynamic Vibrance / DeepDVC in Q2RTX.
 
 It targets owners of compatible NVIDIA RTX GPUs and is meant for:
 
@@ -48,14 +48,26 @@ This fork currently exposes and tests the following user-facing additions:
 Current project notes in this source tree indicate the following working status for the public beta line:
 
 - `DLSS SR` works
-- `DLSS-G / MFG` works
-- `Variable/Dynamic MFG` works with a separate max multiplier limit
-- `RR` is usable and stable enough for testing, though some reflection-heavy scenes may still show artifacts
-- `DeepDVC / RTX Dynamic Vibrance` works in the intended SDR path
+- `DLSS-G / MFG` operates, but the 4X–6X motion-smoothness issue remains unresolved
+- Native Dynamic MFG is unavailable on this Vulkan path; selecting Dynamic falls back to Auto with a fixed multiplier ceiling
+- The RR surface/lighting shimmer fix passed visual testing; preset F is available and is the default, while scene-specific artifacts may remain
+- `DeepDVC / RTX Dynamic Vibrance` uses the SDR path; the current NVIDIA runtime may show a service/development notice
 - DLSS menu parameters are applied live on a loaded map
 - `HDR + MFG` should currently be treated as unsupported for serious testing
 
+## Changes in 0.95 beta
+
+Updated NVIDIA runtime libraries, fixed stationary RR shimmer, added RR preset F, corrected Vulkan surface integration and live Reflex controls, and removed the empty startup window before the first frame.
+
+- [English changelog](CHANGELOG_0.95_EN.md)
+- [Russian changelog](CHANGELOG_0.95_RU.md)
+- [Current release status](project-notes/RELEASE_0.95_STATUS.md)
+- [MFG investigation and measurements](project-notes/history/MFG_2026-09-11/README.md)
+
 ## Main Limitations
+
+- MFG 4X–6X can present frames unevenly despite a high output FPS. A Reflex cap of 300 does not fix the reported issue. This release does not claim an MFG smoothness fix.
+- Experimental MFG input buffering remains off by default; it is not a verified performance improvement.
 
 - For MFG, HDR should currently be considered unsupported for serious testing and is best kept off.
 - RR is stable enough to use, but some mirror, glass, and complex reflection scenes may still show residual artifacts.
@@ -72,7 +84,7 @@ Current project notes in this source tree indicate the following working status 
 Useful local documents in this repo:
 
 - [Public beta overview (EN)](project-notes/README_PUBLIC_BETA_EN.txt)
-- [Streamline 2.11.1 status](project-notes/STREAMLINE_2_11_1_STATUS.md)
+- [0.95 beta status](project-notes/RELEASE_0.95_STATUS.md)
 - [Build from scratch notes](project-notes/BUILD_FROM_SCRATCH.md)
 - [Source package notes](README_PACKAGE.md)
 

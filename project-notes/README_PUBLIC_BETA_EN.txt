@@ -1,9 +1,18 @@
-Q2RTX DLSS Edition by ly - Public Beta 0.9
-Streamline 2.11.1 / DLSS 4.5
+Q2RTX DLSS Edition by ly - Public Beta 0.95
+Streamline 2.14.1 / DLSS 310.9.1
 Based on Q2RTX 1.8.1
 
+0.95 beta update (2026-09-11)
+Full release notes: CHANGELOG_0.95_EN.md.
+Fixed RR surface/lighting shimmer; added RR preset F and made it the default.
+MFG 4X-6X motion smoothness remains a known issue. A Reflex cap of 300 does not fix it.
+Dynamic MFG uses the Auto fallback on Vulkan, without native dynamic multiplier selection.
+DeepDVC may display an NVIDIA service/development notice and is off in the starter configuration.
+Package starter configuration: RR on / F, MFG 3X Fixed, DeepDVC off, experimental MFG input buffering off.
+The Reflex cap includes generated frames in the total output FPS; 0 disables the cap.
+
 Purpose
-This public beta build is intended for testing NVIDIA Streamline 2.11.1, DLSS Super Resolution, DLSS Ray Reconstruction, DLSS Multi Frame Generation, NVIDIA Reflex, and RTX Dynamic Vibrance / DeepDVC in Q2RTX.
+This public beta build is intended for testing NVIDIA Streamline 2.14.1, DLSS Super Resolution, DLSS Ray Reconstruction, DLSS Multi Frame Generation, NVIDIA Reflex, and RTX Dynamic Vibrance / DeepDVC in Q2RTX.
 
 The build targets owners of compatible NVIDIA RTX GPUs and is meant for image-quality comparisons, performance testing, compatibility testing, and real gameplay validation of the new DLSS features.
 
@@ -21,9 +30,9 @@ Installation
 4. Make sure your lawful .pak files remain in baseq2.
 5. Run q2rtx.exe.
 
-Included in Public Beta 0.9
-- NVIDIA Streamline 2.11.1.
-- DLSS 4.5 runtime.
+Included in Public Beta 0.95
+- NVIDIA Streamline 2.14.1.
+- DLSS 310.9.1 runtime.
 - NVIDIA DLSS Super Resolution.
 - DLAA.
 - DLSS Custom Scale.
@@ -119,6 +128,7 @@ Main Menu Options
   - default
   - D
   - E
+  - F
 
 13. DLSS MFG
 - CVar: flt_dlss_mfg

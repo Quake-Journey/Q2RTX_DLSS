@@ -1,0 +1,17 @@
+{
+  "name": "po6_no_capture",
+  "frames": 3982,
+  "present_order_differs_from_display_order": 0,
+  "sorted_display_intervals_ms": [
+    0.0,
+    0.0,
+    0.22049999982118607,
+    3.0137999951839447,
+    7.224899992346764,
+    13.261860002577299,
+    27.65429999679327
+  ],
+  "below1ms_percent": 21.97940216026124,
+  "above8ms_percent": 9.369505149459934,
+  "mean_ms": 3.3820187390090175
+}

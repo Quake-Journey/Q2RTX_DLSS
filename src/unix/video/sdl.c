@@ -58,15 +58,29 @@ static struct {
     int             win_height;
 
     bool            wayland;
+    bool            show_after_present;
     int             focus_hack;
 } sdl;
 
 extern cvar_t* vid_display;
 extern cvar_t* vid_displaylist;
 
+static void mode_changed(void);
+
 SDL_Window* get_sdl_window(void)
 {
     return sdl.window;
+}
+
+static void notify_frame_presented(void)
+{
+    if (sdl.show_after_present) {
+        sdl.show_after_present = false;
+        SDL_ShowWindow(sdl.window);
+        SDL_RaiseWindow(sdl.window);
+        /* SDL applies a hidden window's fullscreen size when it is shown. */
+        mode_changed();
+    }
 }
 
 /*
@@ -380,6 +394,13 @@ static bool init(graphics_api_t api)
 	if (api == GAPI_VULKAN)
 	{
 		flags |= SDL_WINDOW_VULKAN;
+#ifdef _WIN32
+        /* Keep the initial undecorated/empty client area off the desktop while
+         * Vulkan and Streamline initialize. Reveal it only after a real frame
+         * has been presented; later minimization must not show it again. */
+        flags |= SDL_WINDOW_HIDDEN;
+        sdl.show_after_present = true;
+#endif
 	}
 
 	sdl.window = SDL_CreateWindow(PRODUCT, rc.x, rc.y, rc.width, rc.height, flags);
@@ -485,7 +506,7 @@ static void window_event(SDL_WindowEvent *event)
     case SDL_WINDOWEVENT_HIDDEN:
         if (flags & (SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_MOUSE_FOCUS)) {
             active = ACT_ACTIVATED;
-        } else if (flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN)) {
+        } else if (!sdl.show_after_present && (flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN))) {
             active = ACT_MINIMIZED;
         } else {
             active = ACT_RESTORED;
@@ -592,6 +613,10 @@ static void pump_events(void)
 {
     SDL_Event    event;
 
+    /* A startup-hidden window still needs to render its first frame. */
+    if (sdl.show_after_present)
+        CL_Activate(ACT_RESTORED);
+
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
         case SDL_QUIT:
@@ -686,6 +711,7 @@ const vid_driver_t vid_sdl = {
     .get_dpi_scale = get_dpi_scale,
     .set_mode = set_mode,
     .update_gamma = update_gamma,
+    .notify_frame_presented = notify_frame_presented,
 
 #if REF_GL
     .get_proc_addr = get_proc_addr,

@@ -116,6 +116,7 @@ extern void dlss_sl_tag_g_resources(VkCommandBuffer cmd_buf,
     VkImage hudless, VkImageView hudless_view,uint32_t layout_hudless, uint32_t fmt_hudless,
     uint32_t render_w, uint32_t render_h,
     uint32_t display_w, uint32_t display_h,
+    uint32_t input_alloc_w, uint32_t input_alloc_h,
     uint32_t backbuffer_x, uint32_t backbuffer_y);
 extern int  g_dlss_sl_reflex_available;
 extern void dlss_sl_reflex_set_options(int mode, int fps_cap);
@@ -156,7 +157,7 @@ extern uint64_t dlss_sl_deepdvc_get_estimated_vram(void);
 static cvar_t *cvar_dlss_enable  = NULL;  /* 0=off, 1=on                          */
 static cvar_t *cvar_dlss_mode    = NULL;  /* DlssMode_t value (1-6)               */
 static cvar_t *cvar_dlss_preset  = NULL;  /* DlssPreset_t value (0=recommended, 8=K) */
-static cvar_t *cvar_dlss_rr_preset = NULL; /* RR preset: 0=default, 4=D, 5=E       */
+static cvar_t *cvar_dlss_rr_preset = NULL; /* RR preset: 0=default, 4=D, 5=E, 6=F */
 static cvar_t *cvar_dlss_rr      = NULL;  /* 0=off, 1=on                          */
 static cvar_t *cvar_dlss_mfg     = NULL;  /* DlssMfgMode_t: 0=off 2=2X ... 6=6X */
 static cvar_t *cvar_dlss_mfg_policy = NULL; /* DlssMfgPolicy_t: fixed/auto/dynamic */
@@ -164,6 +165,7 @@ static cvar_t *cvar_dlss_mfg_dynamic_max = NULL; /* 0=runtime cap, 2..6=max for 
 static cvar_t *cvar_dlss_mfg_dynamic_target_fps = NULL; /* 0=display refresh auto */
 static cvar_t *cvar_dlss_mfg_fps_cap = NULL; /* 0=off, otherwise caps render FPS */
 static cvar_t *cvar_dlss_mfg_queue_parallelism = NULL; /* 0=default, 1=DLSS-G blocks no client queues */
+static cvar_t *cvar_dlss_mfg_input_ring = NULL; /* trial: private per-frame FG inputs */
 static cvar_t *cvar_dlss_reflex  = NULL;  /* DlssReflexMode_t: 0=off 1=on 2=boost */
 static cvar_t *cvar_dlss_reflex_fps_cap = NULL; /* 0=off, otherwise Reflex driver-aware FPS cap */
 static cvar_t *cvar_dlss_sharpness = NULL; /* DLSS sharpening in [0,1] */
@@ -214,8 +216,29 @@ static DlssStandaloneImage_t s_mfg_depth_ring[DLSS_MFG_RING_SLOTS];
 static DlssStandaloneImage_t s_mfg_mvec_ring[DLSS_MFG_RING_SLOTS];
 static DlssStandaloneImage_t s_mfg_hudless_ring[DLSS_MFG_RING_SLOTS];
 static uint32_t s_mfg_ring_slot_count = 0;
+static VkExtent2D s_mfg_ring_render_extent;
+static VkExtent2D s_mfg_ring_display_extent;
+static VkSemaphore s_mfg_ring_fences[DLSS_MFG_RING_SLOTS];
+static uint64_t s_mfg_ring_fence_values[DLSS_MFG_RING_SLOTS];
+static int s_mfg_last_tagged_slot = -1;
+
+static bool dlss_mfg_ring_enabled(void)
+{
+    return cvar_dlss_mfg_input_ring && cvar_dlss_mfg_input_ring->integer &&
+        s_mfg_ring_slot_count > 1 &&
+        s_mfg_ring_render_extent.width >= qvk.extent_render.width &&
+        s_mfg_ring_render_extent.height >= qvk.extent_render.height &&
+        s_mfg_ring_display_extent.width == qvk.extent_unscaled.width &&
+        s_mfg_ring_display_extent.height == qvk.extent_unscaled.height;
+}
 
 static void enforce_mfg_and_reflex_policy(void);
+
+static void dlss_mfg_fps_cap_changed(cvar_t *self)
+{
+    (void)self;
+    CL_UpdateFrameTimes();
+}
 
 /* ======================================================================
  * CVars
@@ -226,14 +249,16 @@ void vkpt_dlss_init_cvars(void)
     cvar_dlss_enable = Cvar_Get("flt_dlss_enable", "0", CVAR_ARCHIVE);
     cvar_dlss_mode   = Cvar_Get("flt_dlss_mode",   "4", CVAR_ARCHIVE); /* Quality */
     cvar_dlss_preset = Cvar_Get("flt_dlss_preset",  "0", CVAR_ARCHIVE); /* Recommended DLSS 4 preset per mode */
-    cvar_dlss_rr_preset = Cvar_Get("flt_dlss_rr_preset", "4", CVAR_ARCHIVE); /* Preset D for RR */
+    cvar_dlss_rr_preset = Cvar_Get("flt_dlss_rr_preset", "6", CVAR_ARCHIVE); /* Preset F for RR */
     cvar_dlss_rr     = Cvar_Get("flt_dlss_rr",     "0", CVAR_ARCHIVE); /* RR off by default */
     cvar_dlss_mfg    = Cvar_Get("flt_dlss_mfg",    "0", CVAR_ARCHIVE); /* MFG off by default */
     cvar_dlss_mfg_policy = Cvar_Get("flt_dlss_mfg_policy", "0", CVAR_ARCHIVE);
     cvar_dlss_mfg_dynamic_max = Cvar_Get("flt_dlss_mfg_dynamic_max", "0", CVAR_ARCHIVE);
     cvar_dlss_mfg_dynamic_target_fps = Cvar_Get("flt_dlss_mfg_dynamic_target_fps", "0", CVAR_ARCHIVE);
     cvar_dlss_mfg_fps_cap = Cvar_Get("flt_dlss_mfg_fps_cap", "0", CVAR_ARCHIVE);
+    cvar_dlss_mfg_fps_cap->changed = dlss_mfg_fps_cap_changed;
     cvar_dlss_mfg_queue_parallelism = Cvar_Get("flt_dlss_mfg_queue_parallelism", "0", CVAR_ARCHIVE);
+    cvar_dlss_mfg_input_ring = Cvar_Get("flt_dlss_mfg_input_ring", "0", 0);
     cvar_dlss_reflex = Cvar_Get("flt_dlss_reflex", "0", CVAR_ARCHIVE); /* Reflex off by default */
     cvar_dlss_reflex_fps_cap = Cvar_Get("flt_dlss_reflex_fps_cap", "0", CVAR_ARCHIVE);
     cvar_dlss_sharpness = Cvar_Get("flt_dlss_sharpness", "0.0", CVAR_ARCHIVE);
@@ -537,8 +562,9 @@ static void enforce_mfg_and_reflex_policy(void)
 
     if (cvar_dlss_rr_preset) {
         int rr_preset = cvar_dlss_rr_preset->integer;
-        if (rr_preset != 0 && rr_preset != DLSS_PRESET_D && rr_preset != DLSS_PRESET_E)
-            Cvar_SetInteger(cvar_dlss_rr_preset, DLSS_PRESET_D, FROM_CODE);
+        if (rr_preset != DLSS_PRESET_DEFAULT && rr_preset != DLSS_PRESET_D &&
+            rr_preset != DLSS_PRESET_E && rr_preset != DLSS_PRESET_F)
+            Cvar_SetInteger(cvar_dlss_rr_preset, DLSS_PRESET_F, FROM_CODE);
     }
 
     sync_status_cvars();
@@ -647,9 +673,11 @@ DlssPreset_t vkpt_dlss_get_preset(void)
 
 DlssPreset_t vkpt_dlss_get_rr_preset(void)
 {
-    if (!cvar_dlss_rr_preset) return DLSS_PRESET_D;
+    if (!cvar_dlss_rr_preset) return DLSS_PRESET_F;
     int v = cvar_dlss_rr_preset->integer;
-    if (v < 0 || v >= DLSS_PRESET_COUNT) v = DLSS_PRESET_D;
+    if (v != DLSS_PRESET_DEFAULT && v != DLSS_PRESET_D &&
+        v != DLSS_PRESET_E && v != DLSS_PRESET_F)
+        v = DLSS_PRESET_F;
     return (DlssPreset_t)v;
 }
 
@@ -876,7 +904,32 @@ int vkpt_dlss_get_frame_generation_inputs_wait(VkSemaphore *sem, uint64_t *value
     if (!vkpt_dlss_mfg_is_enabled())
         return 0;
 
-    return dlss_sl_get_g_inputs_fence_wait(sem, value);
+    VkSemaphore latest_sem = VK_NULL_HANDLE;
+    uint64_t latest_value = 0;
+    int has_latest = dlss_sl_get_g_inputs_fence_wait(&latest_sem, &latest_value);
+    int previous_slot = s_mfg_last_tagged_slot;
+    s_mfg_last_tagged_slot = -1;
+
+    /* The previous present has now published the fence for its tagged inputs.
+     * Retain that exact value until this slot is reused; waiting for the latest
+     * present here would serialize every new primary-ray pass with FG again. */
+    if (previous_slot >= 0 && has_latest) {
+        s_mfg_ring_fences[previous_slot] = latest_sem;
+        s_mfg_ring_fence_values[previous_slot] = latest_value;
+    }
+
+    if (dlss_mfg_ring_enabled() && previous_slot >= 0) {
+        uint32_t slot = qvk.frame_counter % s_mfg_ring_slot_count;
+        *sem = s_mfg_ring_fences[slot];
+        *value = s_mfg_ring_fence_values[slot];
+        return *sem != VK_NULL_HANDLE && *value != 0;
+    }
+
+    /* Keep the original wait when switching away from shared inputs, or when
+     * ring storage cannot cover the current render size. */
+    *sem = latest_sem;
+    *value = latest_value;
+    return has_latest;
 }
 
 void vkpt_dlss_mark_frame_generation_inputs_waited(uint64_t value)
@@ -909,11 +962,18 @@ void vkpt_dlss_pre_init(void)
 
 PFN_vkGetInstanceProcAddr vkpt_dlss_get_vkGetInstanceProcAddr_proxy(void)
 {
-    return dlss_sl_get_vkGetInstanceProcAddr_proxy();
+    return s_sl_started ? dlss_sl_get_vkGetInstanceProcAddr_proxy() : NULL;
 }
 
 PFN_vkCreateInstance vkpt_dlss_prepare_instance_creation(void)
 {
+    PFN_vkGetInstanceProcAddr get_proc = vkpt_dlss_get_vkGetInstanceProcAddr_proxy();
+    if (get_proc) {
+        PFN_vkCreateInstance create_instance =
+            (PFN_vkCreateInstance)get_proc(VK_NULL_HANDLE, "vkCreateInstance");
+        if (create_instance)
+            return create_instance;
+    }
     return vkCreateInstance;
 }
 
@@ -1111,6 +1171,9 @@ static void dlss_free_mfg_ring_images(void)
         dlss_free_standalone_image(&s_mfg_hudless_ring[i]);
     }
     s_mfg_ring_slot_count = 0;
+    memset(s_mfg_ring_fences, 0, sizeof(s_mfg_ring_fences));
+    memset(s_mfg_ring_fence_values, 0, sizeof(s_mfg_ring_fence_values));
+    s_mfg_last_tagged_slot = -1;
 }
 
 static VkResult dlss_alloc_mfg_ring_images(void)
@@ -1153,6 +1216,8 @@ static VkResult dlss_alloc_mfg_ring_images(void)
     }
 
     s_mfg_ring_slot_count = slot_count;
+    s_mfg_ring_render_extent = qvk.extent_render;
+    s_mfg_ring_display_extent = qvk.extent_unscaled;
     return VK_SUCCESS;
 }
 
@@ -1204,7 +1269,7 @@ static void dlss_copy_into_mfg_ring(
     IMAGE_BARRIER(cmd_buf,
         .image = src_image,
         .subresourceRange = range,
-        .srcAccessMask = VK_ACCESS_SHADER_READ_BIT,
+        .srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
         .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
         .oldLayout = src_layout,
         .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
@@ -1411,7 +1476,7 @@ void vkpt_dlss_get_render_resolution(
     if (vkpt_dlss_rr_is_enabled())
     {
         dlss_sl_rr_get_optimal_settings((int)selected_mode,
-                                        cvar_dlss_rr_preset ? cvar_dlss_rr_preset->integer : DLSS_PRESET_D,
+                                        (int)vkpt_dlss_get_rr_preset(),
                                         display_w, display_h,
                                         render_w, render_h);
     }
@@ -1524,15 +1589,16 @@ typedef struct DlssFrameContext_s {
 
 static void dlss_apply_reflex_if_needed(void)
 {
-    if ((cvar_dlss_reflex && cvar_dlss_reflex->changed) ||
-        (cvar_dlss_reflex_fps_cap && cvar_dlss_reflex_fps_cap->changed) ||
+    /* modified is the dirty flag; changed is the cvar's callback pointer. */
+    if ((cvar_dlss_reflex && cvar_dlss_reflex->modified) ||
+        (cvar_dlss_reflex_fps_cap && cvar_dlss_reflex_fps_cap->modified) ||
         !s_reflex_applied)
     {
         vkpt_dlss_reflex_apply_options();
         if (cvar_dlss_reflex)
-            cvar_dlss_reflex->changed = false;
+            cvar_dlss_reflex->modified = false;
         if (cvar_dlss_reflex_fps_cap)
-            cvar_dlss_reflex_fps_cap->changed = false;
+            cvar_dlss_reflex_fps_cap->modified = false;
         s_reflex_applied = true;
     }
 }
@@ -1568,6 +1634,13 @@ static void dlss_prepare_frame_context(DlssFrameContext_t *ctx)
 
     float fov_y = 2.0f * atanf(1.0f / ((const float *)&ubo->projection_fov_scale)[1]);
     const float *jitter = (const float *)&ubo->sub_pixel_jitter;
+    /* RR consumes the raw ray-traced image. primary_rays.rgen adds jitter to
+       the ray's sample position, so a stationary feature moves by -jitter in
+       the image. Streamline expects that image/projection displacement, not
+       the ray offset. Passing +jitter doubles the misalignment of RR history
+       and makes static surface detail shimmer. SR uses the legacy TAA output
+       and keeps its existing constants. */
+    const float jitter_sign = vkpt_dlss_rr_is_enabled() && !qvk.frame_menu_mode ? -1.0f : 1.0f;
 
     /* Q2RTX stores PT_MOTION as normalized screen-space delta
        (screen_pos_prev - screen_pos_curr), not in pixel units.
@@ -1594,7 +1667,7 @@ static void dlss_prepare_frame_context(DlssFrameContext_t *ctx)
         P, invP,
         ctp,
         pcc,
-        jitter[0], jitter[1],
+        jitter_sign * jitter[0], jitter_sign * jitter[1],
         mv_sx, mv_sy,
         cam_pos, cam_fwd, cam_up, cam_right,
         cam_near, cam_far, fov_y,
@@ -1667,6 +1740,33 @@ static void dlss_tag_mfg_common(VkCommandBuffer cmd_buf,
     uint32_t layout_mvec = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     uint32_t fmt_mvec = VK_FORMAT_R16G16B16A16_SFLOAT;
 
+    uint32_t input_alloc_w = qvk.extent_screen_images.width;
+    uint32_t input_alloc_h = qvk.extent_screen_images.height;
+    if (dlss_mfg_ring_enabled() &&
+        display_w == s_mfg_ring_display_extent.width &&
+        display_h == s_mfg_ring_display_extent.height) {
+        uint32_t slot = qvk.frame_counter % s_mfg_ring_slot_count;
+        dlss_copy_into_mfg_ring(cmd_buf, depth_img, layout_depth,
+            &s_mfg_depth_ring[slot], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            qvk.extent_render.width, qvk.extent_render.height);
+        dlss_copy_into_mfg_ring(cmd_buf, mvec_img, layout_mvec,
+            &s_mfg_mvec_ring[slot], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            qvk.extent_render.width, qvk.extent_render.height);
+        dlss_copy_into_mfg_ring(cmd_buf, hudless_img, layout_hudless,
+            &s_mfg_hudless_ring[slot], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            display_w, display_h);
+        depth_img = s_mfg_depth_ring[slot].image;
+        depth_view = s_mfg_depth_ring[slot].view;
+        mvec_img = s_mfg_mvec_ring[slot].image;
+        mvec_view = s_mfg_mvec_ring[slot].view;
+        hudless_img = s_mfg_hudless_ring[slot].image;
+        hudless_view = s_mfg_hudless_ring[slot].view;
+        layout_hudless = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        input_alloc_w = s_mfg_ring_render_extent.width;
+        input_alloc_h = s_mfg_ring_render_extent.height;
+        s_mfg_last_tagged_slot = (int)slot;
+    }
+
     dlss_sl_tag_g_resources(
         cmd_buf,
         depth_img,
@@ -1683,6 +1783,7 @@ static void dlss_tag_mfg_common(VkCommandBuffer cmd_buf,
         fmt_hudless,
         qvk.extent_render.width, qvk.extent_render.height,
         display_w, display_h,
+        input_alloc_w, input_alloc_h,
         backbuffer_x, backbuffer_y);
 }
 
@@ -1888,7 +1989,7 @@ void vkpt_dlss_rr_process(VkCommandBuffer cmd_buf)
 
     dlss_sl_rr_set_options(
         (int)vkpt_dlss_get_effective_streamline_mode(),
-        cvar_dlss_rr_preset ? cvar_dlss_rr_preset->integer : DLSS_PRESET_D,
+        (int)vkpt_dlss_get_rr_preset(),
         qvk.extent_unscaled.width,
         qvk.extent_unscaled.height,
         ctx.V,

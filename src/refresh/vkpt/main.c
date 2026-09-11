@@ -46,6 +46,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <vulkan/vulkan.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
+#ifdef _WIN32
+#include <SDL2/SDL_syswm.h>
+#include <vulkan/vulkan_win32.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1192,6 +1196,7 @@ static const char *optional_instance_extension_name[NUM_OPTIONAL_INSTANCE_EXTENS
 	VK_OPT_EXT_DO(VK_EXT_DEBUG_MARKER)				\
 	VK_OPT_EXT_DO(VK_NVX_BINARY_IMPORT)			\
 	VK_OPT_EXT_DO(VK_NVX_IMAGE_VIEW_HANDLE)		\
+	VK_OPT_EXT_DO(VK_NV_LOW_LATENCY_2)			\
 	VK_OPT_EXT_DO(VK_KHR_PUSH_DESCRIPTOR)
 
 enum optional_device_extension_id
@@ -1762,7 +1767,34 @@ init_vulkan(void)
 	_VK(qvkCreateDebugUtilsMessengerEXT(qvk.instance, &dbg_create_info, NULL, &qvk.dbg_messenger));
 
 	/* create surface */
-	if(!SDL_Vulkan_CreateSurface(qvk.window, qvk.instance, &qvk.surface)) {
+	bool surface_created = false;
+#ifdef _WIN32
+	PFN_vkGetInstanceProcAddr sl_get_instance_proc = vkpt_dlss_get_vkGetInstanceProcAddr_proxy();
+	if (sl_get_instance_proc) {
+		/* Streamline 2.14 records the surface-to-HWND mapping in this hook.
+		 * SDL's native Vulkan loader bypasses it, leaving DLSS-G without a window. */
+		SDL_SysWMinfo window_info;
+		SDL_VERSION(&window_info.version);
+		PFN_vkCreateWin32SurfaceKHR create_surface = (PFN_vkCreateWin32SurfaceKHR)
+			sl_get_instance_proc(qvk.instance, "vkCreateWin32SurfaceKHR");
+		if (create_surface && SDL_GetWindowWMInfo(qvk.window, &window_info) &&
+			window_info.subsystem == SDL_SYSWM_WINDOWS) {
+			VkWin32SurfaceCreateInfoKHR surface_info = {
+				.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+				.hinstance = window_info.info.win.hinstance,
+				.hwnd = window_info.info.win.window,
+			};
+			VkResult surface_result = create_surface(qvk.instance, &surface_info, NULL, &qvk.surface);
+			surface_created = surface_result == VK_SUCCESS;
+			if (!surface_created)
+				Com_EPrintf("Streamline Vulkan surface creation failed: %s\n", qvk_result_to_string(surface_result));
+		}
+	} else
+#endif
+	{
+		surface_created = SDL_Vulkan_CreateSurface(qvk.window, qvk.instance, &qvk.surface);
+	}
+	if (!surface_created) {
 		Com_EPrintf("SDL2 could not create a surface!\n");
 		return false;
 	}
@@ -2341,6 +2373,8 @@ init_vulkan(void)
 		Com_Error(ERR_FATAL, "Failed to create a Vulkan device.\nError code: %s", qvk_result_to_string(result));
 		return false;
 	}
+	Com_Printf("[Reflex] VK_NV_low_latency2: %s\n",
+		available_optional_device_extensions[OPT_EXT_VK_NV_LOW_LATENCY_2] ? "enabled" : "unavailable (legacy fallback)");
 
 	vkGetDeviceQueue(qvk.device, qvk.queue_idx_graphics, 0, &qvk.queue_graphics);
 	if (qvk.sl_graphics_queue_index >= 2)
@@ -4813,6 +4847,8 @@ R_EndFrame_RTX(void)
 	double present_ms = mfg_debug_counter_to_ms(present_begin, mfg_debug_now_counter());
 	double host_frame_ms = mfg_debug_counter_to_ms(s_mfg_debug_frame_start_counter, mfg_debug_now_counter());
 	mfg_debug_timing_record(s_mfg_debug_last_fence_wait_ms, s_mfg_debug_last_reflex_sleep_ms, present_ms, host_frame_ms);
+	if ((res_present == VK_SUCCESS || res_present == VK_SUBOPTIMAL_KHR) && vid.notify_frame_presented)
+		vid.notify_frame_presented();
 	if(res_present == VK_ERROR_OUT_OF_DATE_KHR || res_present == VK_SUBOPTIMAL_KHR) {
 		recreate_swapchain();
 	}

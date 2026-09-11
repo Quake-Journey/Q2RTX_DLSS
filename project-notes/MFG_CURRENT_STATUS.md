@@ -1,5 +1,16 @@
 # MFG_CURRENT_STATUS
 
+## Актуальный статус — 2026-09-11, 0.95 beta
+
+Текущий релиз: **0.95 beta / Streamline 2.14.1 / DLSS 310.9.1**. Главная сводка: [RELEASE_0.95_STATUS.md](RELEASE_0.95_STATUS.md). Более старые записи ниже сохраняются как история.
+
+Исправление дрожания поверхностей/освещения с RR принято пользователем. RR preset F доступен в меню и выбран по умолчанию. Сохранены исправления запуска и live-применения Reflex.
+
+Плавность MFG 4X–6X **не исправлена**. Исследование остановлено по ограничению времени; не возобновлять автоматически. Постоянная история и два итоговых CSV: [history/MFG_2026-09-11/README.md](history/MFG_2026-09-11/README.md). Лимит Reflex 300 не считать решением. Не сводить симптом к задержке мыши, RR или монитору; корневая причина пока не доказана.
+
+Пакет: `releases/Q2RTX-DLSS-Public-Beta-0.95-NoPAK.zip`. Changelog: `CHANGELOG_0.95_RU.md` и `CHANGELOG_0.95_EN.md`. В GitHub используется отдельный checkout `github/Q2RTX-1.8.1-GPT-source`, remote `https://github.com/Quake-Journey/Q2RTX_DLSS.git`.
+
+
 Дата фиксации: 2026-03-25
 
 ## Обновление 2026-05-09, итоговая сводка Streamline 2.11.1
@@ -795,7 +806,8 @@ MFG работает, но масштабируется плохо:
 - User reported severe performance regression in fresh source build despite successful startup:
   - Ultra Performance no MFG dropped from about 275 to about 200 FPS
   - DLAA no MFG dropped from 60+ to about 35 FPS
-- Built an additional baseline candidate from the partial source snapshot in estore-points\2026-03-23_02-32-07_working_mfg_baseline\source-snapshot by overlaying its src/inc/baseq2 onto a temporary source root and configuring a dedicated uild-baseline-off with CONFIG_VKPT_ENABLE_DEVICE_GROUPS=OFF.
+- Built an additional baseline candidate from the partial source snapshot in
+estore-points\2026-03-23_02-32-07_working_mfg_baseline\source-snapshot by overlaying its src/inc/baseq2 onto a temporary source root and configuring a dedicated uild-baseline-off with CONFIG_VKPT_ENABLE_DEVICE_GROUPS=OFF.
 - Baseline candidate runtime now copied to Q2RTX\\q2rtx.exe for perf comparison.
 - Baseline candidate SHA256: 553411AB0F20C968C876547E6DC056E768156A2620CABD022F273337A1C3B69B
 - Previous fresh source build preserved as Q2RTX\\q2rtx_source_fresh_930A8AC9.exe.
@@ -806,20 +818,29 @@ MFG работает, но масштабируется плохо:
   - user measured roughly DLAA 33 FPS on fresh source build
 - sl_debug comparison showed DLAA context creation itself is effectively identical between the two binaries (same 5160x2160 DLAA path, same DLUnified mode, same extents).
 - Found a concrete code regression in current sources:
-  - old fast path had a single kpt_dlss_reflex_sleep() before present in main.c
-  - current sources also called kpt_dlss_reflex_sleep() inside kpt_dlss_begin_frame() in dlss.c
+  - old fast path had a single
+kpt_dlss_reflex_sleep() before present in main.c
+  - current sources also called
+kpt_dlss_reflex_sleep() inside
+kpt_dlss_begin_frame() in dlss.c
   - this likely caused a double Reflex sleep per host frame.
-- Applied minimal fix: removed Reflex sleep + simulation-end marker from kpt_dlss_begin_frame(), leaving only dlss_sl_begin_frame(frame_idx) there.
+- Applied minimal fix: removed Reflex sleep + simulation-end marker from
+kpt_dlss_begin_frame(), leaving only dlss_sl_begin_frame(frame_idx) there.
 - Rebuilt fresh Release from uild-claude-off and copied to runtime.
 - New candidate SHA256: 73607E5845C9B54C870F246F09314B65B1619C082085EA90CD7DB1FDC39BC313
 - Previous runtime saved as Q2RTX\\q2rtx_before_reflex_beginframe_fix.exe.
 ## 2026-03-25 16:34:24 (clean note)
 - Confirmed closed issue: no-MFG performance regression in fresh source build.
-- Root cause: a second kpt_dlss_reflex_sleep() was being called from kpt_dlss_begin_frame() in dlss.c, while main.c already called kpt_dlss_reflex_sleep() before present.
-- Fix applied: kpt_dlss_begin_frame() now only calls dlss_sl_begin_frame(frame_idx).
+- Root cause: a second
+kpt_dlss_reflex_sleep() was being called from
+kpt_dlss_begin_frame() in dlss.c, while main.c already called
+kpt_dlss_reflex_sleep() before present.
+- Fix applied:
+kpt_dlss_begin_frame() now only calls dlss_sl_begin_frame(frame_idx).
 - User confirmed the fixed fresh source build restored no-MFG performance to the level of q2rtx_restore_72BB_fast.exe.
 - Working runtime SHA256: 73607E5845C9B54C870F246F09314B65B1619C082085EA90CD7DB1FDC39BC313.
-- Restore point: estore-points\2026-03-25_16-34-24_reflex_fix_perf_restored.
+- Restore point:
+estore-points\2026-03-25_16-34-24_reflex_fix_perf_restored.
 - Remaining open issue: severe render FPS drop when DLSS MFG 2X/3X/4X is enabled, especially with DLSS upscaling.
 
 ## 2026-03-25 17:00:00
@@ -831,7 +852,10 @@ MFG работает, но масштабируется плохо:
 ## 2026-03-25 20:25:01
 - Telemetry from condumps 6.txt and 7.txt still shows the main render-FPS bottleneck under MFG is ReflexSleep, not GPU fence or present.
 - Marker-chain fix (SimulationEnd, RenderSubmitStart, RenderSubmitEnd) helped only marginally; MFG 2X/3X/4X still lose too much render FPS.
-- New targeted candidate moves kpt_dlss_reflex_sleep() from end-of-frame (R_EndFrame_RTX, immediately before kQueuePresentKHR) to start-of-frame (R_BeginFrame_RTX, immediately after kpt_dlss_begin_frame() / frame-token acquisition).
+- New targeted candidate moves
+kpt_dlss_reflex_sleep() from end-of-frame (R_EndFrame_RTX, immediately before
+kQueuePresentKHR) to start-of-frame (R_BeginFrame_RTX, immediately after
+kpt_dlss_begin_frame() / frame-token acquisition).
 - Rationale: per Streamline guidance, sleep should happen where the app should idle before starting new-frame work. With sleep at end-of-frame, host render cadence is directly throttled after the frame is already built.
 - Runtime candidate copied to Q2RTX\\q2rtx.exe.
 - Candidate SHA256: 940CAD177F4C05BCA21F7B0014310F3FD1FA9EB3AF243FDDA2D334647D8C13D3.
@@ -857,7 +881,8 @@ MFG работает, но масштабируется плохо:
   - however, with G-Sync ON the 4X path also accumulates much larger present cost;
   - with G-Sync OFF the 4X present cost is near-zero and total behavior is noticeably healthier.
 - This points to an additional DLSS-G pacer / present-mode interaction layer on top of the existing Reflex pacing problem.
-- New candidate changes Vulkan swapchain present-mode selection when MFG is active and id_vsync 0:
+- New candidate changes Vulkan swapchain present-mode selection when MFG is active and
+id_vsync 0:
   - old behavior preferred VK_PRESENT_MODE_IMMEDIATE_KHR
   - new behavior prefers VK_PRESENT_MODE_MAILBOX_KHR for the MFG path if available
 - Rationale: IMMEDIATE is fine for plain rendering, but under DLSS-G it can interact poorly with VRR/G-Sync and inflate present-side pacing cost, especially at 4X.
@@ -869,7 +894,8 @@ MFG работает, но масштабируется плохо:
   - dg_status (DLSSGState.status)
   - dg_presented (DLSSGState.numFramesActuallyPresented)
   - dg_vsync (DLSSGState.bIsVsyncSupportAvailable)
-  - eflex_eff (effective Reflex mode)
+  -
+eflex_eff (effective Reflex mode)
   - surf_vsync
   - present_mode
   - swap_images

@@ -1,0 +1,44 @@
+{
+  "Time": "2026-09-11T21:26:47.8570499+03:00",
+  "Status": "Unresolved; experiments stopped at user time limit",
+  "Files": [
+    {
+      "Path": "Q2RTX-src\\src\\refresh\\vkpt\\main.c",
+      "SHA256": "CF1FB9DC572754C5D312D09646BBFDDBCB9AF17A78348D5E9F9447E9B25B7A24",
+      "MatchesRestorePoint": true
+    },
+    {
+      "Path": "Q2RTX-src\\src\\refresh\\vkpt\\dlss.c",
+      "SHA256": "E81E7DACA39DDCADED0B03222861DDECAE1DAECEFD8F6F0D0C7710230ACF60E1",
+      "MatchesRestorePoint": true
+    },
+    {
+      "Path": "Q2RTX-src\\src\\refresh\\vkpt\\dlss_sl.cpp",
+      "SHA256": "556E696A0543594EB6079BE0E1B41AFDA62CBFFD6DAF8707024FBAC0F261B1D1",
+      "MatchesRestorePoint": true
+    },
+    {
+      "Path": "Q2RTX-src\\src\\client\\main.c",
+      "SHA256": "BFD183AD45014262C884D973CBB80029C4CB45AF6436CC0DB435F3B9E54926D4",
+      "MatchesRestorePoint": true
+    },
+    {
+      "Path": "Q2RTX\\q2rtx.exe",
+      "SHA256": "013EB548AC83DCBF052AEDB6247102D0F34C85D7228D081C3994AF7C3959D0F0",
+      "MatchesRestorePoint": true
+    }
+  ],
+  "Build": "Release client succeeded; all four restored sources forcibly recompiled",
+  "Runtime": "Original baseline EXE; final runtime tests performed on this exact hash",
+  "GamesRemaining": 0,
+  "HelpersRemaining": 0,
+  "FrameViewService": "Stopped",
+  "LatestCrash": {
+    "Name": "Q2RTX_CrashReport00.txt",
+    "LastWriteTime": "2026-09-11T17:57:02.6126537+03:00"
+  },
+  "FinalRuns": [
+    "po3_no_capture",
+    "po6_no_capture"
+  ]
+}

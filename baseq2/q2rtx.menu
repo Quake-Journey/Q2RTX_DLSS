@@ -123,15 +123,16 @@ begin dlss
     range --live -f "%.2f" --status "Extra saturation boost used by DeepDVC when intensity is above zero" "DeepDVC saturation" flt_deepdvc_saturation_boost 0 1 0.01
     blank
     toggle --live --status "Replaces TAA/TAAU with DLSS Ray Reconstruction when DLSS is enabled" "DLSS Ray Reconstruction" flt_dlss_rr
-    pairs --live --status "DLSS RR preset (D = default transformer, E = latest transformer)" "DLSS RR preset" flt_dlss_rr_preset "default" 0 "D" 4 "E" 5
+    pairs --live --status "DLSS RR transformer model: F is the latest and default model; D and E remain available for comparison" "DLSS RR preset" flt_dlss_rr_preset "default" 0 "D" 4 "E" 5 "F" 6
     blank
     pairs --live --status "MFG multiplier for Fixed/Auto. With Dynamic/Variable, any non-off value only enables MFG and this multiplier is ignored" "DLSS MFG" flt_dlss_mfg "off" 0 "2X" 2 "3X" 3 "4X" 4 "5X" 5 "6X" 6
-    pairs --live --status "Fixed uses selected multiplier, Auto lets DLSS-G pace generation, Dynamic/Variable targets FPS and ignores the selected multiplier" "DLSS MFG policy" flt_dlss_mfg_policy "fixed" 0 "auto" 1 "dynamic" 2
+    pairs --live --status "Fixed uses selected multiplier; Auto lets DLSS-G pace generation. Native Dynamic requires D3D12; Vulkan uses Auto fallback" "DLSS MFG policy" flt_dlss_mfg_policy "fixed" 0 "auto" 1 "dynamic" 2
     pairs --live --status "Upper limit for Dynamic/Variable MFG. Auto uses the runtime cap; on Vulkan this also limits Streamline's Auto fallback" "DLSS MFG variable max" flt_dlss_mfg_dynamic_max "auto" 0 "2X" 2 "3X" 3 "4X" 4 "5X" 5 "6X" 6
-    range --live -f "%.0f fps" --status "Dynamic/Variable MFG target FPS, 0 = display refresh auto. If unsupported, Streamline falls back to Auto using the variable max" "DLSS MFG dynamic target" flt_dlss_mfg_dynamic_target_fps 0 480 1
+    range --live -f "%.0f fps" --status "Native Dynamic target FPS, 0 = display refresh auto. Unavailable with Vulkan Auto fallback; use Reflex FPS cap for pacing" "DLSS MFG dynamic target" flt_dlss_mfg_dynamic_target_fps 0 480 1
     pairs --live --status "Vulkan DLSS-G queue parallelism. Default is safest; Parallel uses Streamline eBlockNoClientQueues and waits on the DLSS-G input fence" "DLSS MFG queue mode" flt_dlss_mfg_queue_parallelism "default" 0 "parallel" 1
+    toggle --live --status "Experimental private FG inputs. Test with queue mode Parallel; Off restores shared inputs" "DLSS MFG input buffering" flt_dlss_mfg_input_ring
     pairs --live --status "NVIDIA Reflex: reduces render-ahead for lower input latency (RTX GPU recommended)" "NVIDIA Reflex" flt_dlss_reflex "off" 0 "on" 1 "on + boost" 2
-    range --live -f "%.0f fps" --status "NVIDIA Reflex driver-aware FPS cap, 0 = disabled. This cap is independent from Reflex mode" "NVIDIA Reflex FPS cap" flt_dlss_reflex_fps_cap 0 480 1
+    range --live -f "%.0f fps" --status "0 = disabled. With MFG, limits total output FPS including generated frames. Applies immediately" "NVIDIA Reflex FPS cap" flt_dlss_reflex_fps_cap 0 480 1
     blank
     toggle --live --status "Show DLSS/RR/FG presets and loaded DLL versions in the top overlay" "DLSS debug overlay" r_debug_dlss_overlay
 end

@@ -1,5 +1,11 @@
 # Quake II RTX Change Log
 
+## DLSS Edition 0.95 beta — 2026-09-11
+
+Streamline 2.14.1 / DLSS 310.9.1. Fixed RR surface/lighting shimmer, added RR preset F, corrected Vulkan surface integration and live Reflex settings, and delayed showing the startup window until its first present. MFG 4X–6X motion smoothness remains unresolved.
+
+See the fork's [English release notes](CHANGELOG_0.95_EN.md), [Russian release notes](CHANGELOG_0.95_RU.md), and [MFG investigation](project-notes/history/MFG_2026-09-11/README.md).
+
 ## 1.8.1
 
 **New Features:**

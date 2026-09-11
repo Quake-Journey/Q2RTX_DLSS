@@ -38,6 +38,7 @@ typedef struct {
     void *(*get_proc_addr)(const char *sym);
     void (*swap_buffers)(void);
     void (*swap_interval)(int val);
+    void (*notify_frame_presented)(void);
 
     char *(*get_selection_data)(void);
     char *(*get_clipboard_data)(void);

@@ -942,6 +942,7 @@ static sl::DLSSPreset map_preset_for_mode(int mode, int p)
 static sl::DLSSDPreset map_rr_preset(int p)
 {
     switch (p) {
+    case DLSS_PRESET_F: return sl::DLSSDPreset::ePresetF;
     case DLSS_PRESET_E: return sl::DLSSDPreset::ePresetE;
     case DLSS_PRESET_D: return sl::DLSSDPreset::ePresetD;
     default: return sl::DLSSDPreset::eDefault;
@@ -1446,7 +1447,9 @@ static void dlss_sl_complete_vulkan_setup(
     s_sl_vkDeviceWaitIdle        = (PFN_vkDeviceWaitIdle)        getDeviceProc(device, "vkDeviceWaitIdle");
     s_vkWaitSemaphoresNative     = (PFN_vkWaitSemaphores)       vkGetDeviceProcAddr(device, "vkWaitSemaphores");
     /* vkDestroySurfaceKHR is instance-level, not device-level */
-    s_sl_vkDestroySurfaceKHR     = (PFN_vkDestroySurfaceKHR)    vkGetInstanceProcAddr(instance, "vkDestroySurfaceKHR");
+    s_sl_vkDestroySurfaceKHR     = (PFN_vkDestroySurfaceKHR)
+        (s_sl_vkGetInstanceProcAddrProxy ? s_sl_vkGetInstanceProcAddrProxy : vkGetInstanceProcAddr)
+            (instance, "vkDestroySurfaceKHR");
 
     fprintf(stderr, "[DLSS] SL proxy vkGetDeviceProcAddr: %s\n",
             s_sl_vkGetDeviceProcAddrProxy ? "from sl.interposer.dll" : "FALLBACK to vulkan-1.dll");
@@ -2113,6 +2116,11 @@ void dlss_sl_alloc_g_resources(void)
      * Mark as "allocated" so callers do not retry. */
     s_dlss_g_resources_allocated = true;
     s_g_tags_valid = false;   /* reset: require at least one tag call before enabling eOn */
+    /* Output storage is recreated only after the GPU has been drained. Do not
+     * carry a completion semaphore from the previous swapchain generation. */
+    s_dlssg_inputs_fence = VK_NULL_HANDLE;
+    s_dlssg_inputs_fence_value = 0;
+    s_dlssg_inputs_fence_waited_value = 0;
     fprintf(stdout, "[DLSS-G] Resources managed by SL swapchain hook — no explicit alloc needed\n");
 }
 
@@ -2127,6 +2135,7 @@ void dlss_sl_tag_g_resources(
     VkImage hudless,   VkImageView hudless_view,uint32_t layout_hudless,uint32_t fmt_hudless,
     uint32_t render_w, uint32_t render_h,
     uint32_t display_w, uint32_t display_h,
+    uint32_t input_alloc_w, uint32_t input_alloc_h,
     uint32_t backbuffer_x, uint32_t backbuffer_y)
 {
     if (!s_sl_loaded || !g_dlss_sl_g_available || !s_dlss_g_resources_allocated) return;
@@ -2152,10 +2161,11 @@ void dlss_sl_tag_g_resources(
      * render-sized. Declaring them as render_w/render_h makes the mismatch grow
      * as the upscale ratio increases and can push DLSS-G into an unnecessarily
      * expensive path. Keep the allocation dimensions here and describe the
-     * actual rendered region via render_ext below. HUDless color remains a
-     * display-sized resource as before. */
-    r_dep.width = display_w; r_dep.height = display_h;
-    r_mv.width  = display_w; r_mv.height  = display_h;
+     * actual rendered region via render_ext below. Private ring copies have
+     * their own allocation extent, supplied explicitly by the caller. HUDless
+     * color remains display-sized. */
+    r_dep.width = input_alloc_w; r_dep.height = input_alloc_h;
+    r_mv.width  = input_alloc_w; r_mv.height  = input_alloc_h;
     r_hud.width = display_w; r_hud.height = display_h;
 
     sl::Extent render_ext     = { 0, 0, render_w,  render_h  };

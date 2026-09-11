@@ -1,0 +1,17 @@
+{
+  "name": "po3_no_capture",
+  "frames": 2042,
+  "present_order_differs_from_display_order": 0,
+  "sorted_display_intervals_ms": [
+    1.0196999981999397,
+    3.782500000298023,
+    4.42229999601841,
+    4.846799999475479,
+    5.396000005304813,
+    6.471659995615481,
+    13.527399994432926
+  ],
+  "below1ms_percent": 0.0,
+  "above8ms_percent": 0.14698677119059284,
+  "mean_ms": 4.891780254775581
+}
